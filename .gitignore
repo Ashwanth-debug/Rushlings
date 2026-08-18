@@ -1,0 +1,20 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# Godot-generated C# project files (in case C# is used later)
+.mono/
+data_*/
+mono_crash.*.json
+
+# Exported game builds
+/builds/
+/export/
+export_presets.cfg
+
+# macOS
+.DS_Store
+
+# Editor / OS temp files
+*.tmp
+*~
