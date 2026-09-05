@@ -51,6 +51,7 @@ Desired characteristics:
 - Power pickup routes can create detours.
 - Portals can create shortcuts.
 - Ladders/lifts/launch pads/drop zones provide contextual vertical traversal.
+- Left and right edges connect, making the arena a continuous horizontal loop (accepted at M1).
 - Enough negative space to read players and powers.
 - Architecture should eventually accommodate experiments with six players, although launch scope is four.
 - Arena geometry is designed first as a gameplay diagram; art is layered later.
@@ -101,8 +102,20 @@ The Relic:
 
 Future modes may change the objective, but do not complicate baseline mode.
 
-## 9. Controls — Working Direction
+## 9. Controls & Movement Language
 The final mobile controls must be extremely simple.
+
+### Accepted Movement Language (M1, accepted 2026-09)
+The movement vocabulary is settled. Later milestones build on it rather than revisiting it:
+1. Horizontal movement with acceleration and deceleration.
+2. Player-controlled jump — grounded or from a ladder.
+3. Air steering, with momentum preserved in the air.
+4. Contextual ladder traversal.
+5. Jump off ladder.
+6. Environmental launch pads, stronger than a jump.
+7. Horizontal screen wrapping.
+
+The *model* is settled; the numeric tuning inside it is not, and the mobile mapping is not.
 
 Design intent:
 - Movement primarily controlled with left thumb.
@@ -111,21 +124,45 @@ Design intent:
 - Avoid a large persistent joystick if possible.
 - Controls may appear contextually/fade when not used.
 
-Prototype controls may use keyboard before mobile touch:
+Prototype keyboard controls, deliberately context sensitive. These are prototype mappings, not final mobile controls:
+
+Outside a ladder/traversal zone:
 - A / Left Arrow: move left.
 - D / Right Arrow: move right.
+- W / Up Arrow: jump.
+- Space: jump.
+
+Inside/engaged with a ladder:
+- A / Left Arrow, D / Right Arrow: move.
+- W / Up Arrow: climb up.
+- S / Down Arrow: climb down.
+- Space: jump off the ladder.
+
+Development only:
+- R: reset player position. Not a game control.
 
 ### Vertical Traversal
-Current design principle: no dedicated jump button.
-Explore contextual systems:
-- Ladder / climb zone.
-- Lift.
-- Launch pad.
-- Portal.
-- Drop-through zone.
-- Other arena-controlled traversal.
+The original design principle was no dedicated jump button, with all vertical movement supplied by the arena. **Milestone 1 playtesting rejected that principle** — horizontal movement plus contextual traversal alone felt too restrictive. See `docs/DECISIONS.md` (2026-09).
 
-Milestone 1 must validate whether no-jump-button traversal actually feels good. This decision may be revisited through playtesting.
+Current direction (accepted at M1 close, 2026-09):
+- Rushlings has a normal player-controlled jump: grounded or from a ladder, no double jump, no wall jump, no charged jump.
+- The player can jump off a ladder, so ladders never feel like traps. A held direction carries them away from it.
+- Contextual arena traversal remains, and reaches places a plain jump cannot:
+  - Ladder / climb zone.
+  - Lift.
+  - Launch pad.
+  - Portal.
+  - Drop-through zone.
+  - Other arena-controlled traversal.
+
+Jump is normal player movement. Launch pads and similar mechanisms are stronger environmental traversal. Both exist, and the arena still creates the interesting route choices.
+
+Open question, intentionally unresolved until M5: how Run + Jump + Power map onto touch without turning the screen into a console controller. The keyboard mapping above is a prototype convenience, not a design commitment.
+
+Movement speeds and strengths (climb speed, jump strength, etc.) are current tuning data rather than permanent design constants — see `docs/DECISIONS.md` (2026-09).
+
+### Horizontal Wrapping
+The arena's left and right edges connect. A player leaving completely through one edge re-enters from the other at the same height, keeping momentum, with no fade or respawn. Accepted after M1 iteration 2 playtesting — see `docs/DECISIONS.md` (2026-09).
 
 ## 10. Powers
 Baseline set: four powers.

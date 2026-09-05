@@ -1,0 +1,117 @@
+[gd_scene load_steps=12 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/player/player.tscn" id="1"]
+[ext_resource type="Script" path="res://scripts/launch_pad.gd" id="2"]
+[ext_resource type="Script" path="res://scripts/traversal_zone.gd" id="3"]
+[ext_resource type="Script" path="res://scripts/debug_hud.gd" id="4"]
+[ext_resource type="Script" path="res://scripts/movement_lab.gd" id="5"]
+[ext_resource type="Script" path="res://scripts/arena_wrap.gd" id="6"]
+
+[sub_resource type="RectangleShape2D" id="GroundShape"]
+size = Vector2(2120, 80)
+
+[sub_resource type="RectangleShape2D" id="PlatformAShape"]
+size = Vector2(300, 40)
+
+[sub_resource type="RectangleShape2D" id="PlatformBShape"]
+size = Vector2(300, 40)
+
+[sub_resource type="RectangleShape2D" id="LaunchPadShape"]
+size = Vector2(140, 50)
+
+[sub_resource type="RectangleShape2D" id="TraversalZoneShape"]
+size = Vector2(100, 700)
+
+[node name="MovementLab" type="Node2D"]
+script = ExtResource("5")
+
+[node name="ArenaWrap" type="Node2D" parent="."]
+script = ExtResource("6")
+left_edge = 0.0
+right_edge = 1920.0
+exit_margin = 40.0
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position = Vector2(960, 540)
+enabled = true
+
+[node name="Ground" type="StaticBody2D" parent="."]
+position = Vector2(960, 1040)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Ground"]
+shape = SubResource("GroundShape")
+
+[node name="ColorRect" type="ColorRect" parent="Ground"]
+offset_left = -1060.0
+offset_top = -40.0
+offset_right = 1060.0
+offset_bottom = 40.0
+color = Color(0.35, 0.35, 0.35, 1)
+
+[node name="PlatformA" type="StaticBody2D" parent="."]
+position = Vector2(600, 650)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="PlatformA"]
+shape = SubResource("PlatformAShape")
+
+[node name="ColorRect" type="ColorRect" parent="PlatformA"]
+offset_left = -150.0
+offset_top = -20.0
+offset_right = 150.0
+offset_bottom = 20.0
+color = Color(0.45, 0.45, 0.45, 1)
+
+[node name="PlatformB" type="StaticBody2D" parent="."]
+position = Vector2(1400, 350)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="PlatformB"]
+shape = SubResource("PlatformBShape")
+
+[node name="ColorRect" type="ColorRect" parent="PlatformB"]
+offset_left = -150.0
+offset_top = -20.0
+offset_right = 150.0
+offset_bottom = 20.0
+color = Color(0.45, 0.45, 0.45, 1)
+
+[node name="LaunchPad" type="Area2D" parent="."]
+position = Vector2(250, 970)
+script = ExtResource("2")
+launch_direction = Vector2(0, -1)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="LaunchPad"]
+shape = SubResource("LaunchPadShape")
+
+[node name="ColorRect" type="ColorRect" parent="LaunchPad"]
+offset_left = -70.0
+offset_top = -25.0
+offset_right = 70.0
+offset_bottom = 25.0
+color = Color(0.9, 0.7, 0.1, 1)
+
+[node name="TraversalZone" type="Area2D" parent="."]
+position = Vector2(1200, 650)
+script = ExtResource("3")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="TraversalZone"]
+shape = SubResource("TraversalZoneShape")
+
+[node name="ColorRect" type="ColorRect" parent="TraversalZone"]
+offset_left = -50.0
+offset_top = -350.0
+offset_right = 50.0
+offset_bottom = 350.0
+color = Color(0.2, 0.6, 0.9, 0.4)
+
+[node name="Player" parent="." instance=ExtResource("1")]
+position = Vector2(900, 950)
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="DebugLabel" type="Label" parent="HUD"]
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 420.0
+offset_bottom = 160.0
+script = ExtResource("4")
+player_path = NodePath("../../Player")

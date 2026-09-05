@@ -41,10 +41,14 @@ Met.
 ---
 
 # M1 — Movement Lab
-**Status: [ ] NOT STARTED**
+**Status: [x] COMPLETE / ACCEPTED (2026-09)**
+
+Accepted by the Game Director after three manual playtests. Full plan and outcome: `docs/plans/M01_MOVEMENT_LAB.md`.
 
 ## Risk Being Tested
-Can Rushlings feel responsive and fun with extremely simple horizontal controls and no dedicated jump button?
+Can Rushlings feel responsive and fun with extremely simple controls?
+
+Originally this asked whether the game could work with **no dedicated jump button**. Playtesting answered that question: it could not. A player-controlled jump was added, and the milestone now also tests horizontal screen wrapping. See `docs/DECISIONS.md` (2026-09).
 
 ## Scope
 - Greybox only.
@@ -56,7 +60,10 @@ Can Rushlings feel responsive and fun with extremely simple horizontal controls 
 - Contextual vertical traversal experiments:
   - at least one launch pad,
   - at least one ladder/traversal zone or equivalent.
-- Keyboard controls first.
+- Player-controlled jump (added after first playtest): grounded or from a ladder, no double jump.
+- Jump off ladders (added after second playtest).
+- Horizontal screen wrapping (added after first playtest, accepted after second).
+- Keyboard controls first, with context-sensitive mapping (W/Up jumps outside a zone, climbs inside one).
 - Small debug label only.
 
 ## Explicitly Out of Scope
@@ -75,7 +82,9 @@ Can Rushlings feel responsive and fun with extremely simple horizontal controls 
 - Reversing direction feels controllable.
 - Stopping feels intentional.
 - At least one contextual vertical traversal mechanic works.
-- Game Director can explain the traversal without needing a jump button.
+- ~~Game Director can explain the traversal without needing a jump button.~~ Superseded 2026-09: playtesting showed a jump is needed. Replaced by: jump and contextual traversal each have a clear, distinct purpose.
+- Jump works from the ground only, with no double jump.
+- Horizontal wrapping feels continuous rather than like a respawn.
 - No implementation errors in debug output.
 - Game Director accepts the movement feel after tuning.
 
@@ -84,13 +93,41 @@ Can Rushlings feel responsive and fun with extremely simple horizontal controls 
 - Too slippery/heavy?
 - Does turning feel good?
 - Does automatic traversal surprise or help?
-- Is a no-jump-button direction still desirable?
+- ~~Is a no-jump-button direction still desirable?~~ Answered 2026-09: no.
+- Does jump feel right against the launch pad's stronger boost?
+- Does horizontal wrapping read as continuous movement?
 
-## Closeout
-After acceptance:
-- Document chosen movement parameters.
-- Record vertical traversal decision.
-- Commit/push milestone checkpoint.
+## Closeout — DONE
+- Movement parameters documented as M1 baseline tuning data, not immutable production values.
+- Vertical traversal decision recorded, including the reversal on jump.
+- Milestone checkpoint committed and pushed.
+
+## Accepted Movement Language
+The vocabulary M1 established, which later milestones build on:
+- Horizontal movement with acceleration and deceleration.
+- Player-controlled jump (grounded or from a ladder).
+- Air steering, with momentum preserved in the air.
+- Contextual ladder traversal.
+- Jump off ladder.
+- Environmental launch pads (stronger than a jump, reaching places a jump cannot).
+- Horizontal screen wrapping.
+
+## M1 Baseline Tuning
+Current accepted values. Tuning data, not immutable production values — expect these to move as arenas, powers, bots and mobile controls arrive.
+
+| Parameter | Value |
+|---|---|
+| max_speed | 500 |
+| acceleration | 3000 |
+| friction | 3500 (floor only) |
+| gravity | 2200 |
+| jump_strength | 900 (~192px rise) |
+| launch_strength | 1500 (~511px rise) |
+| climb_speed | 400 |
+
+## Deferred out of M1
+- Projectile/shooting-style interaction. Evaluated at M4 through the powers, not by turning the movement milestone into combat development.
+- Mobile mapping for Run + Jump + Power. Intentionally unresolved until M5.
 
 ---
 

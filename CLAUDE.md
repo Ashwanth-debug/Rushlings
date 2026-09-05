@@ -29,6 +29,13 @@ Milestone 0 — Foundation: COMPLETE.
 - MCP can detect, run and inspect the project.
 - Temporary MCP test was removed. Start product work from a clean `Main` scene.
 
+Milestone 1 — Movement Lab: COMPLETE / ACCEPTED (2026-09).
+- Accepted movement language: horizontal movement, player-controlled jump, air steering, contextual ladder traversal, jump-off-ladder, environmental launch pads, horizontal screen wrapping.
+- Movement lives in `scripts/player.gd`; wrapping in `scripts/arena_wrap.gd`; lab scene in `scenes/movement_lab/`.
+- The Movement Lab is kept as a regression/tuning harness, not a shippable arena.
+- `main.tscn` is still an empty placeholder; the lab is the current run target until M2 introduces the real arena.
+- Full record: `docs/plans/M01_MOVEMENT_LAB.md`.
+
 ## Core Product Principle
 Do not build the beautiful game first. Build the smallest ugly playable game that proves the mechanic is fun.
 
@@ -52,7 +59,7 @@ Do not:
 - Redesign the game because another architecture is easier.
 - Add features outside the active milestone.
 - Introduce 3D gameplay, scrolling cameras, traditional platformer complexity, large ability bars, accounts, backend, networking, monetization, cosmetics or production art before their roadmap stage.
-- Add a dedicated jump button without explicit approval.
+- Extend the jump beyond its approved shape (no double jump, wall jump, charged/variable jump) without explicit approval.
 - Turn Rushlings into a combat/shooter/MOBA.
 - Optimize prematurely.
 - add third-party dependencies without explaining why and receiving approval if they materially affect the project.
@@ -69,8 +76,11 @@ These are intentionally hard constraints unless explicitly revisited:
 - Very small, highly readable characters.
 - Multiplayer value comes from seeing friends, predicting them and interfering with them.
 - Primary interaction is movement + one contextual power action.
-- No dedicated jump button in the current direction.
-- Vertical traversal should be contextual: ladders, lifts, launch pads, portals, drop zones, etc.
+- Rushlings has a player-controlled jump (accepted 2026-09 after M1 playtesting; this replaced the earlier no-jump-button constraint). Grounded or from a ladder — no double jump, wall jump or charged jump without approval.
+- Vertical traversal is also contextual: ladders, lifts, launch pads, portals, drop zones, etc. These are stronger than a jump and reach places a jump cannot.
+- The arena wraps horizontally: leaving one side re-enters from the other at the same height (accepted at M1).
+- Movement numbers are tuning data, not settled design. The movement *model* is what is settled.
+- Projectile/shooting-style interaction is not a movement concern. It is evaluated at M4 through the powers (Freeze, Push, Teleport, Shield), never by turning a movement milestone into combat development.
 - One power can be carried at a time.
 - Initial powers: Freeze, Push, Teleport, Shield.
 - Players collect a power by touching the pickup.
@@ -197,5 +207,5 @@ It is done when:
 6. A Git checkpoint is created/pushed when requested.
 
 ## Immediate Next Milestone
-Milestone 1 — Movement Lab.
-Do not implement automatically just because this file is read. First read `docs/ROADMAP.md`, inspect the project, and prepare the Milestone 1 plan when asked.
+Milestone 2 — Greybox Arena.
+Do not implement automatically just because this file is read. First read `docs/ROADMAP.md`, inspect the project, and prepare the Milestone 2 plan when asked. M2 begins with an arena design deliverable (route graph, spawns, traversal points) before any code.
