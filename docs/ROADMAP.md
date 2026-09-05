@@ -132,7 +132,20 @@ Current accepted values. Tuning data, not immutable production values — expect
 ---
 
 # M2 — Greybox Arena
-**Status: [ ] NOT STARTED**
+**Status: [~] PLAN APPROVED (2026-09-06) — NOT YET IMPLEMENTED**
+
+Full implementation brief: `docs/plans/M02_GREYBOX_ARENA.md`. That document supersedes the scope and
+acceptance criteria below wherever they differ. Arena 01 is "The Seam Ring": four walkable bands plus
+an elevated Relic deck, with three structurally distinct approaches and a Band-3 ring that closes
+only through the horizontal wrap seam.
+
+Approved amendments that change the scope stated below:
+- **No portal pair.** Decided against — see `docs/DECISIONS.md` (2026-09-06).
+- **Route-cost measurement is diagnostic, not normative.** The fast route is allowed to be
+  meaningfully faster; human playtesting overrides route timing.
+- **Readability outranks route-graph complexity.** Simplify or remove geometry rather than preserve
+  the planned graph.
+- **First human test is unprompted exploration**, not a structured route walkthrough.
 
 ## Risk Being Tested
 Can a fixed single-screen side-view arena provide enough navigation depth while keeping every player location understandable?
