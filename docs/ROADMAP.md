@@ -132,20 +132,33 @@ Current accepted values. Tuning data, not immutable production values — expect
 ---
 
 # M2 — Greybox Arena
-**Status: [~] PLAN APPROVED (2026-09-06) — NOT YET IMPLEMENTED**
+**Status: [~] IN PROGRESS — Arena 01 V1 built and playtested; V2 redesign APPROVED (2026-09-06), NOT YET IMPLEMENTED**
 
-Full implementation brief: `docs/plans/M02_GREYBOX_ARENA.md`. That document supersedes the scope and
-acceptance criteria below wherever they differ. Arena 01 is "The Seam Ring": four walkable bands plus
-an elevated Relic deck, with three structurally distinct approaches and a Band-3 ring that closes
-only through the horizontal wrap seam.
+**Current implementation brief: `docs/plans/M02_ARENA_01_V2.md`** (Arena 01 V2, internal working
+name "The Gallery"). That document supersedes the scope and acceptance criteria below wherever they
+differ.
+
+**History:** Arena 01 V1 ("The Seam Ring") was built and playtested once. The first unprompted human
+playtest found the architecture was solving the wrong problem — it optimised routes to the Relic
+rather than making a place four players want to be in. V1 was **redesigned, not patched**. The V1
+brief and its Playtest 1 findings are preserved in `docs/plans/M02_GREYBOX_ARENA.md` §17.
+
+Arena 01 V2 is four horizontal bands — a continuous wrapping floor, a lower gallery, an upper
+gallery severed by one wall, and a Crown band containing a sunken Relic vault — with four starting
+territories (top-left, top-right, bottom-left, bottom-right), two ladder entrances to the Crown, one
+floor-mounted launcher, and wrapping as connective tissue rather than as the organising idea.
 
 Approved amendments that change the scope stated below:
 - **No portal pair.** Decided against — see `docs/DECISIONS.md` (2026-09-06).
-- **Route-cost measurement is diagnostic, not normative.** The fast route is allowed to be
-  meaningfully faster; human playtesting overrides route timing.
-- **Readability outranks route-graph complexity.** Simplify or remove geometry rather than preserve
-  the planned graph.
-- **First human test is unprompted exploration**, not a structured route walkthrough.
+- **Route-cost measurement is diagnostic, not normative.** Human playtesting overrides route timing.
+- **Readability outranks route-graph complexity**, extended by the V2 mental-model principle: the
+  player must never need route-node names or the route graph in order to play.
+- **First human test is unprompted exploration**, not a structured route walkthrough — and for V2
+  the **first session runs with the Relic hidden** ("Move around this arena for three minutes").
+- **The arena must be fun with the Relic removed.** This is the primary V2 design test.
+- **Normal Relic access must not require precision momentum.**
+- **Wrap-route timing is measured and reported, but is not an acceptance threshold.** The criterion
+  is behavioural: does the player intentionally choose wrapping in play?
 
 ## Risk Being Tested
 Can a fixed single-screen side-view arena provide enough navigation depth while keeping every player location understandable?
@@ -162,15 +175,20 @@ Can a fixed single-screen side-view arena provide enough navigation depth while 
 - No production art.
 
 ## Arena Design Deliverable
-Before coding, Claude should create/document a simple arena map showing:
-- Spawn points.
+**Done twice.** V1 in `docs/plans/M02_GREYBOX_ARENA.md`; V2 — the current brief — in
+`docs/plans/M02_ARENA_01_V2.md`. Retained below as the standing checklist for future arenas:
+- Spawn points and starting territories.
 - Route graph.
 - Traversal points.
-- Portal pair.
+- ~~Portal pair.~~ Decided against for Arena 01.
 - Future pickup candidate positions.
 - Relic location.
 - Hazard/respawn candidate areas.
 - Fast/safe/power route rationale.
+- **Playground value with the objective removed.** Added at V2 — an arena must be worth moving
+  around in before it is worth racing across.
+- **Future combat/interference map** — duel zones, interception points, push/drop opportunities,
+  escape paths, crossfire areas. Added at V2.
 
 ## Acceptance Criteria
 - Entire arena fits one screen.

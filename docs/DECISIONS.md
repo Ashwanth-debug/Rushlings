@@ -304,6 +304,8 @@ This file records decisions that should survive across Claude Code sessions. Add
 ---
 
 ## 2026-09-06 — Arena 01 architecture: three approaches, wrapping as connective tissue
+**Status — SUPERSEDED the same day by "Arena 01 V2 architecture: four bands, one wall, a sunken vault" below.** Kept as history, not deleted: this is the architecture that was built, played, and found to be solving the wrong problem, and the reasoning below is what the playtest actually falsified. The *principle* that route choice comes from **arrival property** rather than from parallel lanes survives into V2; the geometry does not.
+
 **Decision:** Arena 01 ("The Seam Ring") offers **three structurally distinct approaches** to the Relic — a fast/skill launch route, a safe/legible ladder route, and a positional/flanking seam-wrap route — plus four walkable bands and the Relic destination deck.
 
 **Rejected:** five parallel routes (fast / safe / vertical / launch / wrap). "Vertical" and "launch" are traversal *verbs*, not destinations. Five lanes converging on one 260 px deck reads as noise, not choice. What creates real route choice is **arrival property** — from below, from the side, or from the far side of the seam.
@@ -381,3 +383,106 @@ This file records decisions that should survive across Claude Code sessions. Add
 **Questions asked after that first session:** which route was discovered first; was the Relic's location understood; did the arena feel like one connected place; was wrapping discovered naturally as navigation; was anything visually reachable but physically unreachable; did they get stuck; which areas felt unnecessary or confusing.
 
 **Why:** an arena's real deliverable is whether it teaches itself. Walking the tester through the intended routes first destroys the only chance to measure that, and would make "the routes are discoverable" unfalsifiable. The question about visually-reachable-but-not is the M1 failure mode; the question about unnecessary areas feeds the readability-over-complexity rule above.
+
+**Extended (2026-09-06, Arena 01 V2):** first contact now begins one step earlier, with the **objective hidden**. See "An arena must be a good playground before it is a good racetrack" below.
+
+---
+
+## 2026-09-06 — An arena must be a good playground before it is a good racetrack
+**Status: ACCEPTED.** This is the primary lesson of Arena 01 Playtest 1 and the reason Arena 01 was redesigned rather than patched.
+
+**Decision:** Arena design starts from *"is this a good place for four players to be at once?"* and only then asks *"how does the objective sit inside it?"* The test is concrete:
+
+> **If the Relic were temporarily removed, would four players still have an interesting playground?**
+
+Arena 01 V2 must pass that test, and every future arena must too.
+
+**Why:** Arena 01 V1 was designed around *"how does each player reach the Relic through different routes?"* It answered that question well — three genuinely distinct approaches, correct movement maths, a working seam ring — and produced an arena the Director described as isolated floating platforms with too much empty space, no proper floor, no four-player territories, and nowhere to chase, interfere or eventually use powers. **A correct answer to the wrong question.**
+
+**How it is enforced, not merely stated:**
+- The **first human playtest of a new arena runs with the objective placeholder hidden.** Controls only, one instruction — *"Move around this arena for three minutes."* No routes, zones or strategies explained. The question asked afterwards is whether moving through the arena was enjoyable *in itself*.
+- Only after that session is recorded is the objective shown, for the separate navigation test.
+- If the arena is not enjoyable to move around empty, no amount of objective tuning fixes it.
+
+**Also decided:** arena geometry must be designed with **future power/projectile interaction** in mind even while powers are unimplemented — duel zones, interception points, push/drop opportunities, escape paths and crossfire areas are part of the arena design deliverable. Powers are not implemented earlier because of this; the *space for them* is reserved earlier.
+
+**Applies to:** every arena, not just Arena 01.
+
+---
+
+## 2026-09-06 — The player's mental model must stay simple, however sophisticated the arena is
+**Status: ACCEPTED.** Extends "Readability outranks route-graph complexity" above with an explicit, testable statement of what the player must perceive.
+
+**Decision:** The arena architecture may be sophisticated internally, but the player's mental model must remain simple. A new player should perceive approximately:
+
+- a floor
+- lower platforms
+- upper platforms
+- a central protected area
+- ladders
+- a launcher
+- wrapping
+
+**They must not need to understand named route nodes or the route graph in order to play.**
+
+**Why:** V1's route graph was legible *on paper* — bands, approaches, a ring closing through the seam — and every node had a justification. None of that reached the player. Node names like `B3S` or `B1.5W` are implementation and tooling labels; the moment an arena requires the player to hold that structure in their head, it has failed regardless of how good the structure is.
+
+**Implication:** internal naming stays as precise as the checker needs. Nothing in the greybox may *depend* on that naming being perceivable. The target remains **see → understand → choose → move**.
+
+---
+
+## 2026-09-06 — Primary objective access must never require precision momentum
+**Status: ACCEPTED** at Arena 01 V2 approval, and it changed the geometry.
+
+**Decision:** No normal entrance to the objective may depend on precision execution. Specifically: **there must be no objective entrance where walking versus running off the same edge determines whether the player succeeds.** Every normal-route entrance must succeed from a standing start, with zero horizontal velocity.
+
+**Precision traversal may exist** — but only as *optional* skill shortcuts, explicitly tagged as such, never on a primary route to the objective.
+
+**What it changed in Arena 01 V2:** the proposed vault had a 100 px shaft between the wall and the chamber floor, so walking off the wall dropped the player a band lower while running off it landed them inside. Two changes fixed it: the vault floor was extended to abut the wall (so a player with zero velocity slides down its face straight into the chamber), and the downward bail-out gap was removed because it reintroduced the same ambiguity on the opposite door. The recorded cost — the vault now has one two-way door rather than a third escape hatch — was accepted deliberately: **a forgiving primary entrance outranks an extra exit.**
+
+**How it is enforced:** new checker rule **R8** in `tools/arena_check.gd` — every entrance on a normal route to the objective must be proven from a standing start.
+
+---
+
+## 2026-09-06 — Wrapping's success criterion is behavioural, not a timing ratio
+**Status: ACCEPTED**, superseding the numerical wrap requirement written for Arena 01 V1.
+
+**Decision:** Wrap-route timing continues to be **measured and reported** by `tools/arena_check.gd` as a diagnostic. It is **not** an acceptance threshold. The criterion is:
+
+> **During play, does the player intentionally choose wrapping for escape, chasing, flanking or repositioning?**
+
+Human playtesting overrides the ratio **in both directions** — a good ratio with no observed use is a failure; observed intentional use with a poor ratio is a success.
+
+**Supersedes:** V1 acceptance criterion 7, *"wrapping is used by ≥1 route whose alternative is ≥2× longer."*
+
+**Why:** in a wrapped arena the world is a cylinder, so "around the other way" is never more than half the circumference. A large timing advantage can therefore only be manufactured by building the entire arena around the seam — which is exactly what V1 did, and exactly what the V2 brief said to stop doing. The number was measuring the architecture's obsession with the seam, not the player's use of it. This is the same principle as *"route-cost measurement is diagnostic, not normative"*, applied to wrapping.
+
+**Retained unchanged:** no hazards within 200 px of the seam, ever.
+
+---
+
+## 2026-09-06 — Arena 01 V2 architecture: four bands, one wall, a sunken vault
+**Decision:** Arena 01 V2 (internal working name "The Gallery") replaces V1's geometry entirely. Full brief: `docs/plans/M02_ARENA_01_V2.md`.
+
+**The organising idea:** a four-storey building with one continuous street, where **it is cheap to fall and expensive to climb.** Every platform drops to the floor in under a second; nothing climbs in under a second. A chased player's escape is therefore always *down and around*, and a chaser's counter is always *predict where they land*. Height is a resource you spend, not a position you hold. That asymmetry is what makes the arena fun with the objective removed.
+
+**Structure:** a continuous wrapping floor · a lower gallery 140 px above it (so the two read and play as one two-storey lower zone) · an upper gallery **severed by a single solid wall** · and a Crown band whose centre is a **sunken vault** holding the Relic. Four starting territories — top-left and top-right on the upper gallery, bottom-left and bottom-right on the floor. **Nobody spawns on the objective band.**
+
+**Rejected from V1 and deleted rather than patched:** all V1 geometry, `B1.5W` (playtested as unnecessarily difficult), and the conflicting launch route.
+
+**Recorded reduction:** V1's approved "three structurally distinct approaches" becomes **two Crown entrances and two vault doors** in V2. A central vault plus a Band-B seam bridge leaves only two full-height clear columns in the frame; every third-entrance candidate either fired a launch arc into a platform's underside (V1's exact failure) or handed one spawn a ~1.8 s walk to the Relic. **This is flagged as the single thing to watch in playtest**, with a named fix documented but deliberately not applied pre-emptively.
+
+**The launcher's identity is now fixed:** *escape the bottom, dramatically, and choose your side at the top.* It sits on the floor, reaches only the upper gallery, and **cannot reach the objective band by construction** — its apex is 93 px below it. V1's launcher was the required precision solution to reach the Relic; this one cannot be.
+
+**Retained from V1 without change:** every script (`player.gd`, `arena_wrap.gd`, `traversal_zone.gd`, `launch_pad.gd`, `seam_mirror.gd`, `arena_01.gd`, `debug_hud.gd`), the scene architecture, the greybox palette, and `tools/arena_check.gd`'s harness. **V2 changes the arena, not the systems.**
+
+---
+
+## 2026-09-06 — Ladder vulnerability to Freeze is an M4 question, not an M2 one
+**Decision:** Arena 01 V2 keeps its ladder spacing and 1.53 s climb duration for the first implementation. M2 is **not** redesigned around a hypothetical balance problem in an unimplemented power.
+
+**The concern, recorded so it is not rediscovered:** a Freeze landing on a player mid-climb is the longest forced-immobility window the arena can produce. Both ladders are also the arena's strongest interception geometry — a climber is stationary and fully visible for the whole climb — which is deliberate design, and only becomes a *balance* problem once powers exist.
+
+**If M4 shows it is genuinely unfair,** the candidate fixes are on the **power** side first — cap Freeze duration, or make climbing interruptible — before any arena change.
+
+**Why this is worth writing down:** it is the same failure mode as designing the arena around route timing. Reshaping proven geometry to pre-empt an unbuilt system's balance is guessing, and it costs the thing the geometry was actually built for.

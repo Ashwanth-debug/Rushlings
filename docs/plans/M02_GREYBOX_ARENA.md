@@ -1,10 +1,28 @@
-# M2 — Greybox Arena (Arena 01, "The Seam Ring")
+# M2 — Greybox Arena (Arena 01 V1, "The Seam Ring")
 
-**Status: PLAN APPROVED (2026-09-06). NOT IMPLEMENTED.**
-Approved by the Game Director with amendments, recorded in §0.2 and applied throughout.
+> ## ⚠️ SUPERSEDED (2026-09-06)
+>
+> **The implementation brief for Milestone 2 is now `docs/plans/M02_ARENA_01_V2.md`
+> (Arena 01 V2, internal working name "The Gallery").**
+>
+> Arena 01 V1 was built, played once, and the Playtest 1 findings in **§17 below** showed the
+> architecture was solving the wrong problem. V1 was redesigned rather than patched.
+>
+> **What this document is still for:**
+> - **§17 — Playtest 1 findings.** These are the evidence that produced V2 and are its brief.
+> - The V1 design reasoning, kept so it is not re-litigated. The *principles* in §2 and §8
+>   survive into V2; the geometry in §3, §4, §6, §7 and §9 does not.
+>
+> **Do not build from §§1–16 of this document.** The V1 geometry is deleted in V2 — see
+> `docs/plans/M02_ARENA_01_V2.md` §12 for the full delete / retain / repurpose disposition.
 
-This document is the implementation brief for Milestone 2. A future session should be able to
-build Arena 01 from this file alone, without the conversation that produced it.
+---
+
+**Status: V1 — SUPERSEDED. Built, playtested once, redesigned.**
+Originally approved by the Game Director with amendments, recorded in §0.2 and applied throughout.
+
+This document was the implementation brief for Milestone 2. A future session should be able to
+build Arena 01 V1 from this file alone — but should not, because V2 replaces it.
 
 ---
 
@@ -613,3 +631,87 @@ it then, with evidence.
 7. **Stop. Hand to the Director for unprompted exploration (§11 Session 1).**
 
 Estimated: one session for the checker and geometry, one for tuning and the playtest.
+
+---
+
+## 17. M2 Playtest 1 — Findings (2026-09-06)
+
+**Status: recorded as playtest evidence only. Not yet acted on.** The Director completed the first
+unprompted-exploration session (§11 Session 1) against the built Arena 01 greybox. The result is a
+**larger design issue**, not a set of local geometry bugs. Per the Director's explicit instruction,
+this section is a record of findings only — no redesign, patching, or further implementation follows
+from it in this session. The next M2 session should treat this as its starting brief.
+
+### 17.1 Validated
+
+The M1 movement language and the core presentation format hold up inside a real arena, not just the
+Movement Lab:
+
+- Fixed-camera arena direction works.
+- Current player scale works.
+- M1 movement works inside a larger arena.
+- Jump works.
+- Ladders work.
+- Horizontal wrapping works.
+- Multiple vertical levels are understandable.
+
+### 17.2 Problems
+
+- Arena feels too sparse.
+- Too much empty/non-playable space.
+- Geometry reads as isolated floating platforms rather than one connected arena.
+- Level design is too focused on route-to-Relic optimization.
+- The Relic currently feels too quickly/directly reachable.
+- The arena does not yet create enough space for four players to chase, fight/interfere, and use
+  powers.
+- Spawn layout does not communicate four distinct player territories.
+- B1.5W is technically reachable but feels unnecessarily difficult/slippery in human play.
+- The fast/launch route has a genuine geometry conflict (recorded during implementation, §7 of the
+  M2 session record / DECISIONS.md pending) and should not be patched independently of this larger
+  redesign.
+
+### 17.3 New design requirement
+
+**Arena 01 should remain fun and strategically interesting even if the Relic is temporarily
+removed.** The arena needs to support four simultaneous players interacting with each other, not
+merely four players independently finding routes to an objective.
+
+Future arena design must consider likely power/projectile interactions even though powers are not
+implemented in M2.
+
+Four starting territories should approximately occupy:
+
+- top-left
+- top-right
+- bottom-left
+- bottom-right
+
+This does not require perfectly symmetric geometry.
+
+The arena should include:
+
+- A meaningful continuous, or largely continuous, lower floor or lower interaction zone.
+- Stronger horizontal connectivity across upper layers.
+- Intentional gaps/choke points.
+- A more structurally protected Relic chamber.
+- More platforms connecting the left and right sides of the screen specifically — players should be
+  able to run from one side of the screen to the other across a chain of platforms like this, not
+  only via the ground or a single upper ring.
+
+**Explicitly out of scope for the next session too:**
+
+- Portals — not yet.
+- Powers — not yet implemented.
+- M1 movement — not to be modified.
+
+### 17.4 Disposition
+
+Recorded as evidence per the Director's instruction. No geometry, scripts, or scenes were changed as
+a result of this playtest. The existing Arena 01 greybox (as implemented and checked in §§9–10) is
+left in place, launch-route conflict and all, pending a full redesign session that treats §17.3 as
+its brief.
+
+**Resolved (2026-09-06):** that redesign session produced **Arena 01 V2**, approved by the Game
+Director with seven amendments. §17.3 was its brief and every finding above is answered in
+`docs/plans/M02_ARENA_01_V2.md` §13. The V1 geometry, including `B1.5W` and the conflicting launch
+route, is **deleted rather than patched** in V2.
