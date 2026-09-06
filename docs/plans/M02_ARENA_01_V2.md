@@ -1,6 +1,14 @@
 # M2 — Arena 01 V2 ("The Gallery")
 
-**Status: APPROVED (2026-09-06) with amendments. NOT IMPLEMENTED.**
+**Status: COMPLETE / ACCEPTED (2026-09-06).** Implemented, playtested across three sessions
+(playground-only with the Relic hidden, objective-visible exploration, and a physical-gateway
+chamber revision), and accepted by the Game Director as the M2 baseline. The geometry below is
+the *implementation brief this was built from*; it does not reflect every hand-edit made during
+playtesting or the connectivity fixes applied at close-out — those are recorded in
+`docs/DECISIONS.md` (2026-09-06 entries, especially "M2 close-out") and verified in
+`tools/arena_check.gd`, not re-authored back into this document. Treat the live scene
+(`scenes/arena_01/arena_01.tscn`) plus the DECISIONS.md log as the source of truth for exact
+current geometry; treat this file as the design reasoning behind it.
 
 This document supersedes `docs/plans/M02_GREYBOX_ARENA.md` §§1–16 as the implementation brief
 for Milestone 2. That document is retained for its **§17 Playtest 1 findings**, which are this

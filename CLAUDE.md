@@ -33,8 +33,14 @@ Milestone 1 — Movement Lab: COMPLETE / ACCEPTED (2026-09).
 - Accepted movement language: horizontal movement, player-controlled jump, air steering, contextual ladder traversal, jump-off-ladder, environmental launch pads, horizontal screen wrapping.
 - Movement lives in `scripts/player.gd`; wrapping in `scripts/arena_wrap.gd`; lab scene in `scenes/movement_lab/`.
 - The Movement Lab is kept as a regression/tuning harness, not a shippable arena.
-- `main.tscn` is still an empty placeholder; the lab is the current run target until M2 introduces the real arena.
 - Full record: `docs/plans/M01_MOVEMENT_LAB.md`.
+
+Milestone 2 — Greybox Arena (Arena 01 V2, "The Gallery"): COMPLETE / ACCEPTED (2026-09-06).
+- V1 ("The Seam Ring") was rejected via unprompted human playtesting; V2 was built, playtested across three sessions, and accepted.
+- Live scene: `scenes/arena_01/arena_01.tscn`, now `main_scene`. Four starting territories, two Crown ladders, one launcher, a protected central Relic vault with two chokepoint-style approaches, a static closed-gate visual over the Relic (no logic yet), and accepted horizontal wrapping.
+- `tools/arena_check.gd` is the permanent geometry/traversal regression tool — extend it, don't bypass it, for any future arena work.
+- Full record: `docs/plans/M02_ARENA_01_V2.md` and the M2 entries in `docs/DECISIONS.md` (2026-09-06).
+- The Movement Lab (`scenes/movement_lab/`) is retained as a separate regression harness.
 
 ## Core Product Principle
 Do not build the beautiful game first. Build the smallest ugly playable game that proves the mechanic is fun.
@@ -207,5 +213,5 @@ It is done when:
 6. A Git checkpoint is created/pushed when requested.
 
 ## Immediate Next Milestone
-Milestone 2 — Greybox Arena.
-Do not implement automatically just because this file is read. First read `docs/ROADMAP.md`, inspect the project, and prepare the Milestone 2 plan when asked. M2 begins with an arena design deliverable (route graph, spawns, traversal points) before any code.
+Milestone 3 — Core Game Loop.
+Do not implement automatically just because this file is read. First read `docs/ROADMAP.md`, inspect the project, and prepare the Milestone 3 plan when asked.

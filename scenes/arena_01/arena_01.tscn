@@ -1,0 +1,487 @@
+[gd_scene format=3 uid="uid://brp82hceicyce"]
+
+[ext_resource type="PackedScene" path="res://scenes/player/player.tscn" id="1"]
+[ext_resource type="Script" uid="uid://dibkvry5l4cul" path="res://scripts/launch_pad.gd" id="2"]
+[ext_resource type="Script" uid="uid://u1s57dj1aj53" path="res://scripts/traversal_zone.gd" id="3"]
+[ext_resource type="Script" uid="uid://gqkrlfrobp1m" path="res://scripts/debug_hud.gd" id="4"]
+[ext_resource type="Script" uid="uid://b61x8v01qofvk" path="res://scripts/arena_01.gd" id="5"]
+[ext_resource type="Script" uid="uid://7fm5yiq01sn0" path="res://scripts/arena_wrap.gd" id="6"]
+[ext_resource type="Script" uid="uid://bg2ordkglqjc1" path="res://scripts/seam_mirror.gd" id="7"]
+
+[sub_resource type="RectangleShape2D" id="FloorShape"]
+size = Vector2(2120, 120)
+
+[sub_resource type="RectangleShape2D" id="CoverWShape"]
+size = Vector2(140, 80)
+
+[sub_resource type="RectangleShape2D" id="CoverShape"]
+size = Vector2(140, 37)
+
+[sub_resource type="RectangleShape2D" id="CWShape"]
+size = Vector2(540, 40)
+
+[sub_resource type="RectangleShape2D" id="CMShape"]
+size = Vector2(360, 40)
+
+[sub_resource type="RectangleShape2D" id="BWShape"]
+size = Vector2(280, 40)
+
+[sub_resource type="RectangleShape2D" id="PierShape"]
+size = Vector2(80, 420)
+
+[sub_resource type="RectangleShape2D" id="BUnderShape"]
+size = Vector2(140, 40)
+
+[sub_resource type="RectangleShape2D" id="BEShape"]
+size = Vector2(340, 40)
+
+[sub_resource type="RectangleShape2D" id="AWShape"]
+size = Vector2(120, 40)
+
+[sub_resource type="RectangleShape2D" id="AWBridgeShape"]
+size = Vector2(90, 40)
+
+[sub_resource type="RectangleShape2D" id="VaultFloorShape"]
+size = Vector2(298, 40)
+
+[sub_resource type="RectangleShape2D" id="VaultFloorBridgeShape"]
+size = Vector2(102, 40)
+
+[sub_resource type="RectangleShape2D" id="VaultGateWShape"]
+size = Vector2(40, 160)
+
+[sub_resource type="RectangleShape2D" id="VaultEastShape"]
+size = Vector2(80, 140)
+
+[sub_resource type="RectangleShape2D" id="AEShape"]
+size = Vector2(246, 40)
+
+[sub_resource type="RectangleShape2D" id="AEBridgeShape"]
+size = Vector2(184, 40)
+
+[sub_resource type="RectangleShape2D" id="CSeamShape"]
+size = Vector2(600, 40)
+
+[sub_resource type="RectangleShape2D" id="BSeamShape"]
+size = Vector2(360, 40)
+
+[sub_resource type="RectangleShape2D" id="LadWShape"]
+size = Vector2(60, 610)
+
+[sub_resource type="RectangleShape2D" id="LadEShape"]
+size = Vector2(80, 610)
+
+[sub_resource type="RectangleShape2D" id="PadCShape"]
+size = Vector2(80, 50)
+
+[node name="Arena01" type="Node2D" unique_id=1734355636]
+script = ExtResource("5")
+
+[node name="ArenaWrap" type="Node2D" parent="." unique_id=217154838]
+script = ExtResource("6")
+
+[node name="Camera2D" type="Camera2D" parent="." unique_id=1484424886]
+position = Vector2(960, 540)
+
+[node name="Geometry" type="Node2D" parent="." unique_id=1322963332]
+
+[node name="Floor" type="StaticBody2D" parent="Geometry" unique_id=1143623071]
+position = Vector2(960, 1020)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Geometry/Floor" unique_id=393101601]
+shape = SubResource("FloorShape")
+
+[node name="ColorRect" type="ColorRect" parent="Geometry/Floor" unique_id=708204399]
+offset_left = -1060.0
+offset_top = -60.0
+offset_right = 1060.0
+offset_bottom = 60.0
+color = Color(0.3, 0.3, 0.3, 1)
+
+[node name="CoverW" type="StaticBody2D" parent="Geometry" unique_id=251435135]
+position = Vector2(690, 920)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Geometry/CoverW" unique_id=1716735957]
+shape = SubResource("CoverWShape")
+
+[node name="ColorRect" type="ColorRect" parent="Geometry/CoverW" unique_id=947710744]
+offset_left = -70.0
+offset_top = -40.0
+offset_right = 70.0
+offset_bottom = 40.0
+color = Color(0.45, 0.45, 0.45, 1)
+
+[node name="CoverE" type="StaticBody2D" parent="Geometry" unique_id=187163945]
+position = Vector2(1250, 920)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Geometry/CoverE" unique_id=536688835]
+position = Vector2(0, 21.5)
+shape = SubResource("CoverShape")
+
+[node name="ColorRect" type="ColorRect" parent="Geometry/CoverE" unique_id=1662638691]
+offset_left = -70.0
+offset_top = 3.0
+offset_right = 70.0
+offset_bottom = 40.0
+color = Color(0.45, 0.45, 0.45, 1)
+
+[node name="C_W" type="StaticBody2D" parent="Geometry" unique_id=1653485334]
+position = Vector2(650, 840)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Geometry/C_W" unique_id=2058997629]
+shape = SubResource("CWShape")
+
+[node name="ColorRect" type="ColorRect" parent="Geometry/C_W" unique_id=2011860432]
+offset_left = -270.0
+offset_top = -20.0
+offset_right = 270.0
+offset_bottom = 20.0
+color = Color(0.45, 0.45, 0.45, 1)
+
+[node name="C_M" type="StaticBody2D" parent="Geometry" unique_id=885362829]
+position = Vector2(1260, 840)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Geometry/C_M" unique_id=1823986266]
+shape = SubResource("CMShape")
+
+[node name="ColorRect" type="ColorRect" parent="Geometry/C_M" unique_id=1348934546]
+offset_left = -180.0
+offset_top = -20.0
+offset_right = 180.0
+offset_bottom = 20.0
+color = Color(0.45, 0.45, 0.45, 1)
+
+[node name="B_W" type="StaticBody2D" parent="Geometry" unique_id=407142965]
+position = Vector2(600, 580)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Geometry/B_W" unique_id=343497582]
+shape = SubResource("BWShape")
+
+[node name="ColorRect" type="ColorRect" parent="Geometry/B_W" unique_id=1047545211]
+offset_left = -140.0
+offset_top = -20.0
+offset_right = 140.0
+offset_bottom = 20.0
+color = Color(0.45, 0.45, 0.45, 1)
+
+[node name="Pier" type="StaticBody2D" parent="Geometry" unique_id=425975205]
+position = Vector2(780, 410)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Geometry/Pier" unique_id=1642640801]
+shape = SubResource("PierShape")
+
+[node name="ColorRect" type="ColorRect" parent="Geometry/Pier" unique_id=1417613577]
+offset_left = -40.0
+offset_top = -210.0
+offset_right = 40.0
+offset_bottom = 210.0
+color = Color(0.38, 0.38, 0.38, 1)
+
+[node name="B_Under" type="StaticBody2D" parent="Geometry" unique_id=1591512591]
+position = Vector2(1030, 600)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Geometry/B_Under" unique_id=1758008008]
+position = Vector2(0, 56)
+shape = SubResource("BUnderShape")
+
+[node name="ColorRect" type="ColorRect" parent="Geometry/B_Under" unique_id=1583239912]
+offset_left = -70.0
+offset_top = 36.0
+offset_right = 70.0
+offset_bottom = 76.0
+color = Color(0.45, 0.45, 0.45, 1)
+
+[node name="B_E" type="StaticBody2D" parent="Geometry" unique_id=1261043115]
+position = Vector2(1450, 580)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Geometry/B_E" unique_id=536835708]
+shape = SubResource("BEShape")
+
+[node name="ColorRect" type="ColorRect" parent="Geometry/B_E" unique_id=1413314955]
+offset_left = -170.0
+offset_top = -20.0
+offset_right = 170.0
+offset_bottom = 20.0
+color = Color(0.45, 0.45, 0.45, 1)
+
+[node name="A_W" type="StaticBody2D" parent="Geometry" unique_id=750826152]
+position = Vector2(600, 320)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Geometry/A_W" unique_id=1195192974]
+position = Vector2(-10, 0)
+shape = SubResource("AWShape")
+
+[node name="ColorRect" type="ColorRect" parent="Geometry/A_W" unique_id=127149394]
+offset_left = -71.0
+offset_top = -20.0
+offset_right = 51.0
+offset_bottom = 20.0
+color = Color(0.45, 0.45, 0.45, 1)
+
+[node name="A_W_Bridge" type="StaticBody2D" parent="Geometry" unique_id=614244186]
+position = Vector2(695, 320)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Geometry/A_W_Bridge" unique_id=1851671926]
+shape = SubResource("AWBridgeShape")
+
+[node name="ColorRect" type="ColorRect" parent="Geometry/A_W_Bridge" unique_id=1662507490]
+offset_left = -45.0
+offset_top = -20.0
+offset_right = 45.0
+offset_bottom = 20.0
+color = Color(0.45, 0.45, 0.45, 1)
+
+[node name="VaultFloor" type="StaticBody2D" parent="Geometry" unique_id=1736686096]
+position = Vector2(1020, 480)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Geometry/VaultFloor" unique_id=170296294]
+position = Vector2(51, 0)
+shape = SubResource("VaultFloorShape")
+
+[node name="ColorRect" type="ColorRect" parent="Geometry/VaultFloor" unique_id=1340065971]
+offset_left = -99.0
+offset_top = -20.0
+offset_right = 200.0
+offset_bottom = 20.0
+color = Color(0.58, 0.58, 0.58, 1)
+
+[node name="VaultFloor_Bridge" type="StaticBody2D" parent="Geometry"]
+position = Vector2(871, 480)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Geometry/VaultFloor_Bridge"]
+shape = SubResource("VaultFloorBridgeShape")
+
+[node name="ColorRect" type="ColorRect" parent="Geometry/VaultFloor_Bridge"]
+offset_left = -51.0
+offset_top = -20.0
+offset_right = 51.0
+offset_bottom = 20.0
+color = Color(0.58, 0.58, 0.58, 1)
+
+[node name="VaultEast" type="StaticBody2D" parent="Geometry" unique_id=539046873]
+position = Vector2(1180, 410)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Geometry/VaultEast" unique_id=2137592878]
+position = Vector2(0, -20)
+shape = SubResource("VaultEastShape")
+
+[node name="ColorRect" type="ColorRect" parent="Geometry/VaultEast" unique_id=1290062703]
+offset_left = -40.0
+offset_top = -90.0
+offset_right = 40.0
+offset_bottom = 50.0
+color = Color(0.58, 0.58, 0.58, 1)
+
+[node name="A_E" type="StaticBody2D" parent="Geometry" unique_id=392842313]
+position = Vector2(1420, 320)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Geometry/A_E" unique_id=1336435572]
+position = Vector2(-77, 0)
+shape = SubResource("AEShape")
+
+[node name="ColorRect" type="ColorRect" parent="Geometry/A_E" unique_id=1629552947]
+offset_left = -200.0
+offset_top = -20.0
+offset_right = 47.0
+offset_bottom = 20.0
+color = Color(0.45, 0.45, 0.45, 1)
+
+[node name="A_E_Bridge" type="StaticBody2D" parent="Geometry" unique_id=393003679]
+position = Vector2(1558, 320)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Geometry/A_E_Bridge" unique_id=568402767]
+shape = SubResource("AEBridgeShape")
+
+[node name="ColorRect" type="ColorRect" parent="Geometry/A_E_Bridge" unique_id=445596747]
+offset_left = -92.0
+offset_top = -20.0
+offset_right = 92.0
+offset_bottom = 20.0
+color = Color(0.45, 0.45, 0.45, 1)
+
+[node name="VaultGateW" type="StaticBody2D" parent="Geometry" unique_id=1689064387]
+position = Vector2(940, 290)
+rotation = 1.5707964
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Geometry/VaultGateW" unique_id=2099553265]
+position = Vector2(66, -60)
+shape = SubResource("VaultGateWShape")
+
+[node name="ColorRect" type="ColorRect" parent="Geometry/VaultGateW" unique_id=1879865426]
+offset_left = 46.0
+offset_top = -140.0
+offset_right = 86.0
+offset_bottom = 20.0
+color = Color(0.42, 0.42, 0.5, 1)
+
+[node name="SeamMirror" type="Node2D" parent="Geometry" unique_id=1716845508]
+script = ExtResource("7")
+
+[node name="C_Seam" type="StaticBody2D" parent="Geometry/SeamMirror" unique_id=1930188992]
+position = Vector2(1880, 840)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Geometry/SeamMirror/C_Seam" unique_id=1499719557]
+shape = SubResource("CSeamShape")
+
+[node name="ColorRect" type="ColorRect" parent="Geometry/SeamMirror/C_Seam" unique_id=1382334461]
+offset_left = -300.0
+offset_top = -20.0
+offset_right = 300.0
+offset_bottom = 20.0
+color = Color(0.52, 0.52, 0.52, 1)
+
+[node name="B_Seam" type="StaticBody2D" parent="Geometry/SeamMirror" unique_id=2057858961]
+position = Vector2(1960, 580)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Geometry/SeamMirror/B_Seam" unique_id=1254727709]
+shape = SubResource("BSeamShape")
+
+[node name="ColorRect" type="ColorRect" parent="Geometry/SeamMirror/B_Seam" unique_id=748502698]
+offset_left = -180.0
+offset_top = -20.0
+offset_right = 180.0
+offset_bottom = 20.0
+color = Color(0.52, 0.52, 0.52, 1)
+
+[node name="Traversal" type="Node2D" parent="." unique_id=1846065372]
+
+[node name="LadW" type="Area2D" parent="Traversal" unique_id=732083619]
+position = Vector2(400, 515)
+script = ExtResource("3")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Traversal/LadW" unique_id=1076967847]
+shape = SubResource("LadWShape")
+
+[node name="ColorRect" type="ColorRect" parent="Traversal/LadW" unique_id=973043397]
+offset_left = -30.0
+offset_top = -305.0
+offset_right = 30.0
+offset_bottom = 305.0
+color = Color(0.2, 0.6, 0.9, 0.4)
+
+[node name="LadE" type="Area2D" parent="Traversal" unique_id=267207930]
+position = Vector2(1690, 515)
+script = ExtResource("3")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Traversal/LadE" unique_id=2134381539]
+shape = SubResource("LadEShape")
+
+[node name="ColorRect" type="ColorRect" parent="Traversal/LadE" unique_id=1068459059]
+offset_left = -40.0
+offset_top = -305.0
+offset_right = 40.0
+offset_bottom = 305.0
+color = Color(0.2, 0.6, 0.9, 0.4)
+
+[node name="PadC" type="Area2D" parent="Traversal" unique_id=2047007242]
+position = Vector2(310, 935)
+script = ExtResource("2")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Traversal/PadC" unique_id=610892834]
+shape = SubResource("PadCShape")
+
+[node name="ColorRect" type="ColorRect" parent="Traversal/PadC" unique_id=732416104]
+offset_left = -40.0
+offset_top = -25.0
+offset_right = 40.0
+offset_bottom = 25.0
+color = Color(0.9, 0.7, 0.1, 1)
+
+[node name="Markers" type="Node2D" parent="." unique_id=214343235]
+
+[node name="Spawn1" type="Marker2D" parent="Markers" unique_id=137273359]
+position = Vector2(480, 532)
+
+[node name="Spawn2" type="Marker2D" parent="Markers" unique_id=1505763260]
+position = Vector2(1320, 532)
+
+[node name="Spawn3" type="Marker2D" parent="Markers" unique_id=313684116]
+position = Vector2(500, 932)
+
+[node name="Spawn4" type="Marker2D" parent="Markers" unique_id=1840830539]
+position = Vector2(1440, 932)
+
+[node name="PickupCandidate1" type="Marker2D" parent="Markers" unique_id=51396390]
+position = Vector2(960, 932)
+
+[node name="PickupCandidate2" type="Marker2D" parent="Markers" unique_id=1484626067]
+position = Vector2(1030, 552)
+
+[node name="PickupCandidate3" type="Marker2D" parent="Markers" unique_id=756123055]
+position = Vector2(1850, 532)
+
+[node name="PickupCandidate4" type="Marker2D" parent="Markers" unique_id=2017719063]
+position = Vector2(1260, 792)
+
+[node name="PickupCandidate5" type="Marker2D" parent="Markers" unique_id=400469473]
+position = Vector2(780, 172)
+
+[node name="HazardCandidate1" type="Marker2D" parent="Markers" unique_id=598325796]
+position = Vector2(1000, 932)
+
+[node name="HazardCandidate2" type="Marker2D" parent="Markers" unique_id=1674050301]
+position = Vector2(490, 932)
+
+[node name="RelicPlaceholder" type="ColorRect" parent="." unique_id=597846208]
+offset_left = 980.0
+offset_top = 400.0
+offset_right = 1020.0
+offset_bottom = 460.0
+color = Color(0.85, 0.75, 0.25, 1)
+
+[node name="RelicGate" type="Node2D" parent="." unique_id=1469229969]
+
+[node name="Bar1" type="ColorRect" parent="RelicGate" unique_id=17330297]
+offset_left = 927.0
+offset_top = 376.0
+offset_right = 933.0
+offset_bottom = 460.0
+color = Color(0.42, 0.42, 0.5, 1)
+
+[node name="Bar2" type="ColorRect" parent="RelicGate" unique_id=1936233323]
+offset_left = 955.0
+offset_top = 376.0
+offset_right = 961.0
+offset_bottom = 460.0
+color = Color(0.42, 0.42, 0.5, 1)
+
+[node name="Bar3" type="ColorRect" parent="RelicGate" unique_id=895779790]
+offset_left = 983.0
+offset_top = 376.0
+offset_right = 989.0
+offset_bottom = 460.0
+color = Color(0.42, 0.42, 0.5, 1)
+
+[node name="Bar4" type="ColorRect" parent="RelicGate" unique_id=188181713]
+offset_left = 1011.0
+offset_top = 376.0
+offset_right = 1017.0
+offset_bottom = 460.0
+color = Color(0.42, 0.42, 0.5, 1)
+
+[node name="Bar5" type="ColorRect" parent="RelicGate" unique_id=1440462026]
+offset_left = 1039.0
+offset_top = 376.0
+offset_right = 1045.0
+offset_bottom = 460.0
+color = Color(0.42, 0.42, 0.5, 1)
+
+[node name="Bar6" type="ColorRect" parent="RelicGate" unique_id=1898245504]
+offset_left = 1067.0
+offset_top = 376.0
+offset_right = 1073.0
+offset_bottom = 460.0
+color = Color(0.42, 0.42, 0.5, 1)
+
+[node name="Player" parent="." unique_id=2031999731 instance=ExtResource("1")]
+position = Vector2(480, 532)
+
+[node name="HUD" type="CanvasLayer" parent="." unique_id=1288690424]
+
+[node name="DebugLabel" type="Label" parent="HUD" unique_id=406891595]
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 420.0
+offset_bottom = 160.0
+script = ExtResource("4")
+player_path = NodePath("../../Player")

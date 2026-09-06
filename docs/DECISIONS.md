@@ -486,3 +486,113 @@ Human playtesting overrides the ratio **in both directions** — a good ratio wi
 **If M4 shows it is genuinely unfair,** the candidate fixes are on the **power** side first — cap Freeze duration, or make climbing interruptible — before any arena change.
 
 **Why this is worth writing down:** it is the same failure mode as designing the arena around route timing. Reshaping proven geometry to pre-empt an unbuilt system's balance is guessing, and it costs the thing the geometry was actually built for.
+
+---
+
+## 2026-09-06 — Arena 01 V2 Playtest 1a: accepted, and hard-to-reach spots are pickup value, not a defect
+**Status: ACCEPTED.** First unprompted human playtest with the Relic hidden (Session 1a, per V2-A7).
+
+**Decision:** The V2 redesign works substantially better than V1. The Game Director explored all major sections unprompted, including both ladder columns and the upper areas, and confirmed the arena is worth exploring even with the objective hidden — the primary V2 design test (`docs/plans/M02_ARENA_01_V2.md` §1.1) passes.
+
+**Also decided:** some locations are *intentionally* more difficult to reach (e.g. `B_Under`, the pier top, the Band C gap beneath the vault — the existing "see it, can't reach it" spots noted in `M02_ARENA_01_V2.md` §9.4 and §11). **Do not simplify these.** They are recorded as the arena's **highest-value future power-pickup candidates**, on the reasoning that travel effort should be repaid by a stronger pickup. This confirms and strengthens the pickup-candidate positions already marked in `M02_ARENA_01_V2.md` §11 — no new positions were added, but their difficulty is now a validated feature, not a candidate for deletion.
+
+**Note:** the Director has since hand-edited some V2 structure positions/sizes directly in the editor ("moved the position of some of the structure to make it interesting") after this playtest. Per instruction, this geometry is not being re-validated or reverted this session.
+
+---
+
+## 2026-09-06 — M4 hypothesis (unimplemented): Freeze may have a direct mode and an environmental/surface mode
+**Status: RECORDED FOR M4. Not approved, not implemented. Exploration only.**
+
+**The idea:** Freeze could support two interaction types:
+- **Direct Freeze** — used against another player, temporarily immobilizes/slows them (the originally planned behavior).
+- **Environmental Freeze** — used on part of the *arena*: a floor/platform becomes temporarily icy (players lose traction/slide on contact), or a ladder becomes temporarily unclimbable/slippery (a climber slides back down).
+
+**Why it's worth recording:** the design opportunity isn't the ice specifically — it's that a power could affect the **arena itself**, not just other players, making the arena part of the multiplayer interference rather than just a stage for it. That is a genuinely new axis for the power set and worth evaluating properly at M4.
+
+**Explicitly not done now:** no ice physics, no surface-state system, no Freeze implementation, no power system of any kind in M2. This is a hypothesis for M4 playtesting, not a spec.
+
+---
+
+## 2026-09-06 — Playtest 1a "Push" clarification: no Push mechanic exists in the M2 build
+**Decision:** Investigated after the Director described "experiencing Push" during Playtest 1a. `grep -rniE "push" scripts/ scenes/ project.godot` returns **zero matches** anywhere in the project. No power system of any kind is implemented — M2 is movement/arena only, per the approved roadmap.
+
+**Conclusion:** what was experienced was ordinary collision/movement physics, not a Push power. The most likely candidates, given the arena's geometry: colliding with a solid corner (the pier's wall, or `CoverW`/`CoverE`) during `move_and_slide`, which can visibly deflect/stop a body in a way that can read as being "pushed"; or the launch pad's momentum on arrival. No code change made — there is nothing to change. This is recorded so the question is not re-asked, and so a real Push power (M4) is understood to start from zero, not from an accidental prototype.
+
+---
+
+## 2026-09-06 — Tempo observation: 1.25x debug playback felt good (tuning note, not a change)
+**Decision:** Recorded only. The Director found the arena "particularly enjoyable" running Godot's debug playback at 1.25×. This is **not** applied — M1 movement constants (`max_speed`, `acceleration`, `friction`, `gravity`, `jump_strength`, `launch_strength`, `climb_speed`) are unchanged.
+
+**Why recorded, not acted on:** this is a single-session impression on one specific arena, not a validated tuning direction. Scaling movement speed and scaling engine playback speed are not equivalent (playback speed also scales physics timestep and everything else in the world uniformly, including camera perception time), so this does not imply "increase `max_speed` by 25%." Revisit as a game-feel hypothesis in a future tuning pass, with its own dedicated test rather than folded into M2.
+
+---
+
+## 2026-09-06 — Relic chamber gateways: physical, not just colour — and why the east side isn't symmetric with the west
+
+**Status: ACCEPTED**, implemented in Arena 01 V2 after Playtest 1b. Full context: the Director felt the vault didn't read as protected ("climb → jump/drop → reach Relic," no sense of entering somewhere) and asked for actual physical gateways — narrow openings between solid geometry — rather than a colour-only threshold marker, modelled on a reference showing a solid structure with two narrow doorway cutouts.
+
+**West gateway (built as designed):** a new wall, `VaultGateW` (40×160, x 920–960, y 210–370), stands east of the Pier, leaving a 100px-wide fall corridor (Pier's east face at x=820 to `VaultGateW`'s west face at x=920) that a player drops through after stepping off the Pier-top walkway. Its underside (y=370) sits 90px above the vault floor (y=460) — well clear of the floor, so it narrows the *fall* without becoming a wall that divides the chamber once someone has landed.
+
+**East gateway: the same design does not work, and was reverted after being built and caught by the checker.** The first implementation added an equivalent wall on top of `A_E`'s own walking surface, meant to leave only a "lane" near the step down to `VaultEast`. Simulation showed this wall doesn't create a passable gap — it's a full, unclimbable blocker (by design, since it must not be jump-overable) sitting on the *only* path along a straight one-directional corridor. Unlike the west's vertical shaft (open air, no surface to walk along), a wall on a walking surface in this move set (no duck/crouch) can only ever fully block or fully not-block the corridor behind it — there is no "narrow passable gap" available on a 1D walking lane. The wall was removed (`VaultGateE` node and its shape both deleted).
+
+**What the east side has instead:** its existing geometry. `VaultEast` (80px wide, distinctly coloured at 0.58 grey vs. ordinary platforms' 0.45) was already the sole path in and out — "everything funnels here" per the original approved design — a narrower physical chokepoint than the west's new 100px gap. No new wall was needed or added; the asymmetry between a one-way vertical drop (west) and a two-way stepped descent (east) is a difference in *kind*, not something a matching wall could paper over.
+
+**Also fixed in the same pass (connectivity, not gateway design):**
+- `A_W_Bridge` (90×40, x 650–740) — restores the walkway from the Director's narrower `A_W` (530–650) to the Pier (740–820), which the narrowing had disconnected by a 90px gap.
+- `A_E_Bridge` (184×40, x 1466–1650) — same fix on the east side: the Director's shortened `A_E` (now ending at x=1466 instead of 1620) had opened a 184px gap to `LadE`'s column (1650–1730), meaning the ladder's own restored height alone wasn't sufficient — restoring reach required both.
+- `LadE`'s column height was restored to its original 610px (top y=210, base y=820 unchanged) — a prior hand-edit had shortened it to 411px (top y=409), which no longer reached `A_E`'s height at all and silently turned the east Crown route into a dead climb to `B_E`.
+- `CoverW` was given its own collision shape (`CoverWShape`, 140×80) instead of sharing `CoverE`'s resized one (`CoverShape`, 140×37) — the shared resource meant resizing `CoverE`'s collision had also shrunk `CoverW`'s without moving its visual, leaving roughly 21px strips at the top and bottom of the drawn block that looked solid but weren't.
+
+**New finding, not fixed:** with `B_Under` lowered (an accepted hand-edit), the rise from `C_W` to it is now 184px — within a hair of the M1 jump's absolute maximum (184.1px). `arena_check.gd`'s R7 rule flags this because `B_Under` is only 140px wide (below the 280px minimum for a non-skill landing), the same class of issue R7 was built to catch. Not fixed, because `B_Under` is one of the Director's confirmed "intentionally hard to reach, high pickup value" spots (see the Playtest 1a entry above) — a jump sitting right at the theoretical limit may be exactly the kind of difficulty that's wanted there. Recorded for a deliberate decision, not silently patched.
+
+---
+
+## 2026-09-06 — Relic closed-gate visual (M2 readability only)
+
+**Status: ACCEPTED.** Final human playtest confirmed the static gate clearly communicates the Relic is CLOSED/unavailable.
+
+**Decision:** Added a purely visual "closed vault" treatment around the Relic — no collision, no script, no state, matching `RelicPlaceholder`'s own simplicity. It reuses the Director's rotated `VaultGateW` beam (now a horizontal header at x 920–1080, y 336–376, directly above the Relic) as the lintel, and adds six thin vertical bars (`RelicGate/Bar1`–`Bar6`, 6px wide each, y 376–460) spaced across x 927–1073, framing the Relic (x 980–1020) with visible gaps between bars so it still reads as "something valuable, behind bars" rather than fully hidden.
+
+**Also fixed:** `tools/arena_check.gd`'s geometry extraction (`_aabb_of`) didn't account for rotation at all, and crashed outright on a `CollisionShape2D` with no shape assigned. Both are now handled (rotated shapes get a proper rotated-corners bounding box; a shapeless collision node reports a zero-size point instead of crashing the checker). Tooling correctness, not a design change.
+
+**Found, flagged, and resolved at M2 close-out:** further hand-edits since the gateway approval — `VaultFloor` narrowed and shifted, and `VaultGateW` lost its collision shape when rotated — broke the west door and briefly made the vault a true trap. See "M2 close-out" below for the fixes.
+
+---
+
+## 2026-09-06 — M2 close-out: final connectivity fixes on the Director's hand-edited geometry
+
+**Status: ACCEPTED.** Milestone 2 — Arena 01 V2 is complete. This entry records the last three implementation-defect fixes made while auditing the Director's manual edits against the checker, immediately before accepting Arena 01 V2 as the M2 baseline. All three are narrow corrections tied to a specific defect (missing collision, a connectivity gap, or a trap) — none change the Director's intentional geometry (position, width, or the "taller wall" character of `VaultEast`) beyond what was needed to fix the defect.
+
+**1. `VaultGateW` (the rotated header above the Relic) had no collision shape.** Rotating it in the editor had detached its `CollisionShape2D` from any shape resource (the resource itself was also dropped from the scene). This is squarely "missing collision caused accidentally by rotation/editing." Fixed by re-adding `VaultGateWShape` (40×160, unchanged from its original size) and a local position offset (66, −60) that places it exactly where the visual already was — no change to what's seen, the collision now simply matches it. Also serves as a solid header for the Relic gate, which reads as more "closed."
+
+**2. `VaultFloor` had been narrowed from 820–1220 to 922–1220, opening a 102px gap between the Pier's east edge and the vault floor.** This made the west door's drop-in land on `C_W` (Band C) instead of the vault — "impossible traversal caused unintentionally." Fixed with `VaultFloor_Bridge`, a new 102×40 patch filling exactly that gap (x 820–922), rather than widening `VaultFloor` itself back to its old size — the Director's narrower vault floor is preserved unchanged; the gap it opened up next to the Pier is what's patched.
+
+**3. `VaultEast` had grown from a short step (~100px tall) to a 288px-tall block (y 172–460), and its top was now high enough to obstruct the standing-start drop from `A_E` rather than catching it.** Investigated further: with the west door already one-way-in by design (see "protected by height" and "one-way in" decisions above) and this east block now un-jumpable in *either* direction (rise from `VaultFloor` to its top was 288px, the M1 jump's absolute max is 184.1px), **the vault had become a true trap with no way out at all.** That crosses from "the Director is exploring a taller wall" into "player becoming trapped" — one of the explicit defect categories, not a design question left open. Fixed by trimming `VaultEastShape` to 140px tall (top now at y=320, keeping its bottom anchored on the vault floor at y=460 exactly as authored) — a 140px rise is safely inside R1's comfortable band (≤150px) and clear of the 151–199px forbidden band an earlier attempt at this fix (160px) fell into. `VaultEast` is still visibly taller than its original ~100px form and reads as a proper wall; it's no longer tall enough to seal the chamber. The Director's position, width and colour for `VaultEast` are all unchanged.
+
+**Verification:** `tools/arena_check.gd` re-run after all three fixes: R1–R12 all pass except the pre-existing, already-recorded `B_Under` finding (see above — not touched, by design). Both vault doors, both gateway entries and exits, both Crown-entrance routes, the skill jump, the launcher, and all six wrap-integrity checks pass. Godot MCP run: no errors.
+
+**Not touched, and not a defect:** `B_Under`'s 184px rise from `C_W` sitting right at the M1 jump ceiling. Recorded earlier as a confirmed "intentionally hard to reach, high pickup value" spot, not re-litigated here.
+
+---
+
+## 2026-09-06 — Milestone 2 (Arena 01 V2) — COMPLETE / ACCEPTED
+
+**Status: ACCEPTED.** Full milestone summary; see `docs/ROADMAP.md` and `docs/plans/M02_ARENA_01_V2.md` for the closed-out scope and brief.
+
+**Major outcomes, for a session that hasn't read the whole log:**
+
+- **V1 ("The Seam Ring") was rejected** by unprompted human playtesting — a route diagram optimized for reaching the Relic, not a place four players wanted to be. Preserved as history in `docs/plans/M02_GREYBOX_ARENA.md`, not deleted.
+- **V2 ("The Gallery"), an interconnected arena, is accepted** — built around one asymmetry (cheap to fall, expensive to climb) rather than parallel routes to an objective.
+- **A substantial, continuous lower interaction floor is accepted** — the floor plus Band C read and play as one two-storey chase/interference zone.
+- **Stronger horizontal connectivity across upper layers is accepted** — the Crown runs 1160px unbroken; Band C and Band B both span most of the arena width.
+- **Four starting territories are accepted**: top-left (`B_W`), top-right (`B_E`), bottom-left (Floor west), bottom-right (Floor east) — deliberately not mirrored; fairness comes from measured route cost, not symmetric geometry.
+- **Vertical exploration was naturally discovered** — both ladders attracted the Director unprompted in Playtest 1a/1b, without being told they existed.
+- **Difficult-to-reach areas are confirmed potential high-value future power-pickup locations** (`B_Under` chief among them) — explicitly not to be simplified; difficulty is the point, not a defect.
+- **Horizontal wrapping remains accepted**, unchanged from M1, and used both as connective tissue and (per the Director's own playtest) as an intentional escape/flank/reposition tool.
+- **A protected central Relic chamber is accepted**, with **approximately two controlled, chokepoint-style approaches** as the current direction — a genuine physical gateway on the west (a 100px walled fall-shaft beside the Pier) and the pre-existing narrow `VaultEast` step on the east, rather than a colour-only threshold or a maze.
+- **A static closed-gate visual over the Relic is accepted** — bars plus a header, no collision, no script, no state — confirmed by human playtest to read immediately as "found, but currently protected/closed." The actual open/close *logic* (timer, state machine, collection) is explicitly M3's job, not M2's.
+- **Tempo observation, recorded but not acted on:** 1.25× debug playback felt noticeably more energetic and fun than 1.0×, which felt merely acceptable. No M1 movement/physics values have been changed. Re-evaluate once multiple active players/bots exist — a single-player playback-speed impression isn't sufficient grounds to retune shared movement constants.
+- **Freeze's possible dual mode (direct-on-player, and environmental/surface, e.g. an icy floor or ladder) remains an M4 hypothesis** — recorded, not approved, not implemented. No power system exists in the M2 build.
+- **Push clarification stands:** no Push mechanic exists anywhere in the codebase (confirmed by full-text search); what read as "Push" during playtesting was ordinary collision physics.
+
+**What M3 inherits:** a fixed, checker-verified arena (`tools/arena_check.gd` is the permanent regression tool — rules and route proofs updated throughout M2, not reset), four working spawn territories, a closed Relic placeholder with no logic behind it yet, and marked-but-unimplemented pickup/hazard candidate positions. M3 adds the Relic's actual open/collect/win logic, the match timer, and bots — not before.

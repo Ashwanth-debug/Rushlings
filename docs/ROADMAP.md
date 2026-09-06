@@ -132,9 +132,13 @@ Current accepted values. Tuning data, not immutable production values — expect
 ---
 
 # M2 — Greybox Arena
-**Status: [~] IN PROGRESS — Arena 01 V1 built and playtested; V2 redesign APPROVED (2026-09-06), NOT YET IMPLEMENTED**
+**Status: [x] COMPLETE / ACCEPTED (2026-09-06)**
 
-**Current implementation brief: `docs/plans/M02_ARENA_01_V2.md`** (Arena 01 V2, internal working
+Accepted by the Game Director after Arena 01 V2 playtests 1a, 1b, the physical-gateway chamber
+iteration, and the closed-gate readability test. Full record: `docs/plans/M02_ARENA_01_V2.md`
+(status updated to closed) and the M2 close-out entries in `docs/DECISIONS.md` (2026-09-06).
+
+**Implementation brief: `docs/plans/M02_ARENA_01_V2.md`** (Arena 01 V2, internal working
 name "The Gallery"). That document supersedes the scope and acceptance criteria below wherever they
 differ.
 
@@ -203,6 +207,27 @@ Can a fixed single-screen side-view arena provide enough navigation depth while 
 
 ## Out of Scope
 Bots, powers, win condition, production art, online multiplayer.
+
+## Closeout — DONE
+- V1 rejected through unprompted human playtesting; V2 ("The Gallery") built, playtested across
+  three sessions (playground-only, objective-visible, and the physical-gateway chamber revision),
+  and accepted.
+- Four starting territories (top-left, top-right, bottom-left, bottom-right), a substantial
+  continuous lower interaction floor, and stronger horizontal connectivity across upper layers are
+  all accepted, per `docs/DECISIONS.md`.
+- A protected central Relic chamber with two chokepoint-style approaches (a physical west gateway,
+  the narrow pre-existing east step) is accepted, plus a static closed-gate visual over the Relic
+  confirmed by playtest to read as "found, but protected."
+- Horizontal wrapping remains accepted, unchanged from M1, and was used intentionally by the
+  Director during play (escape/flank/reposition), not just measured as a diagnostic.
+- `tools/arena_check.gd` was extended throughout M2 (tightened R1/R2, new R3/R4/R5/R6/R7/R8/R9/R12,
+  diagnostics R10/R11, gateway-specific checks) and stays the permanent regression tool for future
+  arena work, including M3.
+- Movement tempo (1.25× playback) and Freeze's possible environmental/surface mode are recorded
+  hypotheses for later milestones, not implemented — M1 movement constants are unchanged.
+- Known, deliberately deferred: `B_Under`'s jump-in rise sits right at the M1 jump ceiling
+  (184px vs. a 184.1px max) — recorded, not simplified, since it's a confirmed high-value future
+  pickup spot.
 
 ---
 
