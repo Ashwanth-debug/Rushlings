@@ -596,3 +596,219 @@ Human playtesting overrides the ratio **in both directions** — a good ratio wi
 - **Push clarification stands:** no Push mechanic exists anywhere in the codebase (confirmed by full-text search); what read as "Push" during playtesting was ordinary collision physics.
 
 **What M3 inherits:** a fixed, checker-verified arena (`tools/arena_check.gd` is the permanent regression tool — rules and route proofs updated throughout M2, not reset), four working spawn territories, a closed Relic placeholder with no logic behind it yet, and marked-but-unimplemented pickup/hazard candidate positions. M3 adds the Relic's actual open/collect/win logic, the match timer, and bots — not before.
+
+---
+
+## 2026-09-06 — M3 is split into M3-1 and M3-2 with a hard human-playtest approval gate
+
+**Status: APPROVED PLAN. Nothing implemented.** Full brief: `docs/plans/M03_CORE_GAME_LOOP.md`.
+
+**Decision:** Milestone 3 is delivered as two sequential halves:
+
+- **M3-1 — Four-player foundation.** Slot architecture, controller abstraction, colour identity
+  with toggleable P1–P4 labels, navigation graph, per-edge movement executors, Dijkstra, roaming
+  bots with a small curiosity/encounter bias, deterministic bot variation, recovery, checker
+  extensions. **No objective of any kind.**
+- **HARD STOP.** Human playtest A1 (1.0×) → labels off → A2 (1.25× via `Engine.time_scale`) →
+  A3 (back to 1.0×) → optional collision A/B → Director acceptance → its own commit.
+- **M3-2 — Core match loop.** Match FSM, setup timer, UNLOCKING telegraph, vault sealing, gate
+  CLOSED→OPEN, Relic collection, winner, results, rematch, bot goal switch.
+
+**Binding on implementation sessions:** a fresh session builds **M3-1 only**. The functional
+Relic, gate state machine, setup timer, winner detection, results and rematch must not be built —
+not partially, not as disabled stubs — until M3-1 is played and accepted.
+
+**Why split, and why not re-cut M3/M4 instead:** M3 as originally scoped is two milestones of
+work, but the match loop must not slide into M4 either — M4 is powers, and powers layered on an
+unvalidated loop is strictly worse. The correct cut is inside M3.
+
+**Why navigation is in the first half:** the original session brief proposed "four-player
+simulation" *before* "bot navigation". That ordering does not hold — four-player simulation
+requires navigation, or it is four rectangles standing still.
+
+---
+
+## 2026-09-06 — A player slot's controller is data: human-local, bot, or (reserved) network
+
+**Status: APPROVED for M3-1.**
+
+**Decision:** `player.gd`'s three intent functions (`_get_horizontal_intent`,
+`_get_vertical_intent`, `_get_jump_intent`) delegate to an assigned controller object.
+`HumanController` reads input exactly as today but **parameterised by an action-name prefix /
+device id rather than hardcoded action strings**. `BotController` produces the same three signals.
+`NetworkController` is a reserved name in the enum and is **not written**. Slot→controller mapping
+lives in a `MatchConfig` read at match start.
+
+**Why now:** `docs/DECISIONS.md` (2026-09, "Mobile control mapping stays unresolved until M5")
+already commits to replacing those three function bodies without touching movement physics — the
+seam exists. Formalising it costs ~30 lines; skipping it means rewriting the bot/human coupling
+at M5 and again at M9. **Nothing may assume P1 is permanently the only possible human.**
+
+**Explicitly not built:** networking, device assignment, split input maps, a join flow, or a
+second local human.
+
+**Hard constraint retained:** zero changes to movement physics or M1 tuning values.
+
+---
+
+## 2026-09-06 — Player↔player physical collision starts OFF, as a development toggle only
+
+**Status: APPROVED for M3-1. Deliberately NOT a permanent product decision.**
+
+**Decision:** M3-1 begins with players on their own collision layer, masking world geometry only.
+The toggle stays available for a brief A/B during the human playtest, run **after** the primary
+tempo/readability tests so it cannot contaminate them.
+
+**Why off first:** M2 already established that incidental collision physics *read as a Push power*
+to the Director (see the Playtest 1a "Push" clarification above), so leaving bodies colliding
+would contaminate M4's real Push. Bots wedging on each other is also the likeliest single source
+of stuck states. It is one line to flip back.
+
+---
+
+## 2026-09-06 — Bots get one small social behaviour in M3-1: curiosity / encounter bias
+
+**Status: APPROVED for M3-1.**
+
+**Decision:** while roaming, a bot occasionally selects an interest **region currently occupied by
+another player** instead of a purely environmental one. Working weighting: **~70–80%
+environmental, ~20–30% player-occupied**, exported and configurable. The target is a *region*,
+resolved to a nav-graph node once at selection time and **never re-targeted** if that player
+moves. On arrival, normal roaming resumes immediately.
+
+**This is explicitly NOT:** chasing · attacking · targeting the human · aggression · pursuit or
+prediction · M4 combat AI.
+
+**Why it exists:** without it, four independent roamers in a 1920px wrapping arena can plausibly
+never meet, and M3-1's central questions — *do encounters actually happen?* and *does the Director
+want to interfere with them?* — go untested. The bias must sample **other bots as well as the
+human**; if it only ever selects the human's region it becomes the chasing behaviour this
+decision excludes.
+
+---
+
+## 2026-09-06 — Vault camping is prevented by sealing the two approaches during setup, not by barring the Relic
+
+**Status: APPROVED for M3-2.**
+
+**The problem, found by audit:** the accepted `RelicGate` bars are six `ColorRect`s with **zero
+collision**. Any player can walk into the alcove at t=0 and stand on the Relic for the whole setup
+phase. With no powers in M3 to dislodge them, camping is a guaranteed win — that alone would
+invalidate the M3-2 test. The M2 close-out entry above correctly describes the gate as a
+readability treatment; it was never a barrier.
+
+**Decision (Option A):** during SETUP and UNLOCKING, physically seal the two approved vault
+approaches — a barrier plugging the **west fall shaft** (x 820–922, between the Pier's east face
+and `VaultGateW`) and a barrier at the **east threshold** above `VaultEast` (x 1140–1220), tall
+enough to be un-jumpable from `A_E` (≥200px rise against a 184.1px max). Both removed at OPEN.
+**The accepted decorative bars are preserved unchanged** as the readability signal; they stay
+cosmetic and the barriers do the work.
+
+**Rejected, recorded so they are not retried:**
+- **Giving the bars collision. This creates a trap.** The west door is one-way-in, so a player
+  dropping through lands in the 820–927 pocket, walled by the Pier's un-jumpable 260px east face
+  and now by solid bars — stuck until OPEN. That violates "nobody sits watching a match."
+- **Doing nothing** (Relic simply uncollectible until OPEN) — degenerate; first to the alcove wins
+  at t=open.
+- **Repel volumes / soft push-out** — exactly the arbitrary invisible walls ruled out at planning.
+
+**Trap check, required by the approval:** with Option A the camping positions become the **Pier
+top** (west) and **`A_E`** (east) — both legitimate, fully visible, contestable, and neither a
+trap (Pier top → `A_W_Bridge` → `A_W` → `LadW` down; `A_E` → `LadE` down). **R9 must be re-proved
+by simulation in both gate states.**
+
+**Second-order risk, named not solved:** with a sealed vault the rush may be decided in ~1s by who
+is standing at a door. The doors are near-equidistant from the Relic (west landing ≈80–140px,
+east step-down ≈120px), so the real contest becomes holding a door for 10s. Acceptable for M3; if
+it still feels anticlimactic the fix belongs to M4's powers, not to more geometry.
+
+**Arena geometry changes in M3 are limited to these two barriers.** Specifically not `B_Under`,
+the Pier top, or the Band C gap under the vault — all confirmed high-value M4 pickup sites.
+
+---
+
+## 2026-09-06 — M3 setup is 10 seconds, and UNLOCKING is its final ~2 seconds
+
+**Status: APPROVED for M3-2. Temporary M3 value.**
+
+**Decision:** `0–8s SETUP/CLOSED · 8–10s UNLOCKING (still physically sealed) · at 10s OPEN.`
+Exported and tunable. **UNLOCKING is the tail of the setup timer, not an additional wait.**
+
+**Why 10 and not 25:** the checker times the Crown entrances at 1.97s (east) and 2.48s (west) from
+Band C, so roughly 3–4.5s puts any player at a vault door. The ~25s working value exists to give
+**power acquisition** room; in M3 there are no powers, so 25s is ~4s of travel followed by ~21s of
+standing at a doorway. At 5s the phase has no identity. At 10s there is ~6s of jockeying — one
+full cross-arena reposition (~2–3s) plus a counter, which is a real decision. Secondary benefit:
+15–20s rounds let a session run many rematches, which is how the "Again." signal gets measured.
+
+**This does not supersede the ~25s working direction for M4**, when powers give the phase content.
+**M3-2 must A/B 10s vs 25s** so the number is measured rather than assumed.
+
+**Why the telegraph:** it turns the rush into a race with a starting gun rather than a coin flip on
+standing position, and it serves the requirement that the state change be extremely obvious.
+Greybox only — a visible countdown plus a clear gate state change. No animation, no VFX.
+
+---
+
+## 2026-09-06 — The tempo A/B uses `Engine.time_scale`, never rescaled movement constants
+
+**Status: APPROVED for the M3-1 playtest.** Resolves the "1.25× felt better" observation recorded
+at M2 close-out.
+
+**Decision:** compare 1.0× and 1.25× with `Engine.time_scale`. **No M1 movement constant may be
+changed during or because of this test.** Playtest order is A1 (1.0×) → A2 (1.25×) → **A3 (back to
+1.0×)**; the return leg is required, because one A/B cannot distinguish a real preference from
+novelty and order effects are real.
+
+**Why this specific method matters:** `time_scale` scales time uniformly, so every jump arc, gap
+and landing window is **geometrically identical** and the entire M2 checker proof still holds — and
+it reproduces exactly the thing the Director already judged at 1.25× debug playback. Rescaling
+`max_speed` / `gravity` / `jump_strength` changes **every arc**, and would **invalidate the whole
+M2 geometry proof**, requiring full re-verification and possibly re-authored platforms.
+
+**Therefore:** if 1.25× wins, converting it into real constants is a **separate, dedicated tuning
+pass with a full checker re-run** — never folded into M3.
+
+**Implementation consequence:** all bot timers must be `delta`-based, never frame counts, so bots
+are `time_scale`-safe.
+
+---
+
+## 2026-09-06 — `arena_check.gd` gets an acknowledged-exception list so its exit code means something
+
+**Status: APPROVED. Work item #0 — before any M3 gameplay code.**
+
+**Decision:** the checker gains a small, explicit, commented allowlist of accepted findings
+(currently exactly one: the `C_W -> B_Under` R7 landing-width finding). An acknowledged finding is
+still printed in full and clearly marked, but does not affect the exit code. Any unlisted failure
+still fails. **A clean accepted baseline must return exit code 0.** Also fix `_band_report`'s
+Band A member list, which omits `A_W_Bridge` and `A_E_Bridge` and therefore reports 38.8% coverage
+instead of the real ~53%.
+
+**Why:** the tool currently exits non-zero on the accepted M2 baseline because of that one
+deliberately-unfixed finding, which makes it useless as an M3 regression gate — a new failure is
+indistinguishable from the old one. `B_Under` itself is **not** to be fixed; it is a confirmed
+"intentionally hard to reach, high pickup value" spot.
+
+---
+
+## 2026-09-06 — The route-cost table's four warnings are a harness gap the bots will close
+
+**Status: RECORDED at M3 planning. Hard M3-1 acceptance criterion.**
+
+**Finding:** at the M2 baseline all four spawns report `NO PROVEN ROUTE` in `arena_check.gd`'s
+route-cost table. Per the tool's own comment this is a harness limitation, not an arena defect: it
+departs a ledge at full running speed, and because deceleration is floor-only nothing slows the
+fall's horizontal drift, so it overshoots narrow targets below.
+
+**Why this matters for M3:** the manoeuvre the harness cannot perform — a controlled low-speed
+edge departure, releasing input the instant the body clears the edge — is exactly the manoeuvre a
+bot must perform dozens of times per match. The bot's `drop` executor *is* the fix.
+
+**Decision:** once the per-edge executors exist, the checker drives **them** rather than
+maintaining its own copies, so the two cannot drift. **Retiring all four warnings is a hard M3-1
+acceptance criterion.**
+
+**Related:** the executors' recipes are not invented — they are the checker's already-proven route
+primitives (`_run_and_jump_near_edge`, `_drop_to_band_c`, the ladder-climb blocks, and
+`_route_launcher`'s 12-tick steering delay), re-shaped from `await` coroutines into per-frame state.

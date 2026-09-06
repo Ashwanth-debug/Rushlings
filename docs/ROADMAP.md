@@ -232,10 +232,32 @@ Bots, powers, win condition, production art, online multiplayer.
 ---
 
 # M3 — Core Game Loop
-**Status: [ ] NOT STARTED**
+**Status: [ ] NOT STARTED — plan approved 2026-09-06**
+
+**Implementation brief: `docs/plans/M03_CORE_GAME_LOOP.md`.** That document supersedes the scope
+and acceptance criteria below wherever they differ.
+
+## ⛔ M3 is split into two halves with a hard approval gate between them
+
+| | Half | Contains | Ends with |
+|---|---|---|---|
+| **M3-1** | **Four-player foundation** | Slot architecture · controller abstraction · colour identity + toggleable P1–P4 labels · nav graph · edge executors · Dijkstra · roaming bots with a small curiosity/encounter bias · deterministic bot variation · recovery · checker extensions | **HARD STOP → human playtest A1 (1.0×) / A2 (1.25× `time_scale`) / A3 (1.0×) → Director acceptance → commit** |
+| **M3-2** | **Core match loop** | Match FSM · 10s setup timer · UNLOCKING telegraph (final ~2s) · vault sealing · gate CLOSED→OPEN · Relic collection · winner · results/rematch · bot goal switch | Playtest B1/B2/B3 → acceptance → commit |
+
+**A fresh session implements M3-1 only.** The functional Relic, gate state machine, setup timer,
+winner detection, results and rematch **must not be built** — not partially, not as disabled
+stubs — until the Game Director has played and accepted M3-1.
+
+**Work item #0 comes before all M3 gameplay code:** give `tools/arena_check.gd` an acknowledged-
+exception list for the accepted `B_Under` R7 finding and fix its Band A membership/coverage, so a
+clean accepted baseline returns exit code 0 and the tool can gate M3 by exit code.
 
 ## Risk Being Tested
 Is the simplest Rushlings loop fun even with ugly placeholder graphics?
+
+M3-1 asks the prior question the roadmap never separated out: **does Rushlings become fun,
+readable and appropriately chaotic when four players move simultaneously inside the same
+fixed-screen arena?** The Relic loop is deliberately not the first thing tested.
 
 ## Scope
 - Four player slots.
@@ -266,6 +288,18 @@ Is the simplest Rushlings loop fun even with ugly placeholder graphics?
 - Rematch works without restarting application.
 - Round can complete in under ~2 minutes.
 - Game Director voluntarily wants to replay enough to continue development.
+
+## Added at plan approval (2026-09-06)
+- **M3-1 acceptance is separate and comes first.** Four players readable and enjoyable in Arena 01
+  with no objective; bots navigate via the same M1 movement with no teleport cheating; encounters
+  actually happen; 1.0× vs 1.25× compared with `Engine.time_scale` only.
+- **All four spawns report a proven route** in `arena_check.gd`'s route-cost table. The four
+  `NO PROVEN ROUTE` warnings at the M2 baseline are a harness limitation the bot's `drop` executor
+  fixes, and retiring them is a hard M3-1 criterion.
+- **No M1 movement constants change during M3.** A 1.25× preference converts to real constants
+  only in a separate tuning pass with a full checker re-run.
+- **Setup duration is 10s for M3 only**, with a 10 vs 25 A/B at M3-2. It does not supersede the
+  ~25s working direction for M4 when powers exist.
 
 ## Critical Decision Gate
 If the game is not fun as shapes, do not proceed directly to art. Diagnose movement, arena and objective first.
