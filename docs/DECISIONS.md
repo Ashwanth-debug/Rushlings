@@ -1241,3 +1241,213 @@ divergence; the launcher's 0-completions-in-360s note, which reflects its SKILL 
 designed, not a defect). None of these are arena, physics, or M3-1-scope problems — bot strategic
 intelligence, powers, combat, Relic seeking, learned/human-imitation bot intelligence, networking,
 and couch/controller multiplayer remain M3-2/M4/M9+ scope, untouched.
+
+---
+
+## 2026-09-09 — M3-2 planning audit: five findings that superseded the approved M3-2 section
+
+**Status: ACCEPTED.** Full plan: `docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md`.
+
+Part Two (§11) of `docs/plans/M03_CORE_GAME_LOOP.md` was written on 2026-09-06 — before the
+traversal audit, before the vault-exit work, before `Floor→C_M`, and before the Director's later
+hand-edits to the chamber. A planning/audit session found five of its statements now wrong or
+incomplete. Recorded here rather than silently corrected, so the reasoning survives:
+
+- **A1 — the vault door coordinates in §11.4 are stale.** §11.4 specifies an east barrier at
+  `x 1140–1220` above a `VaultEast` topping out at `y 320`. Live scene: `VaultEast` is
+  **x 1160–1240, y 360–460** — 20px east and 100px tall, not the 140px the M2 close-out recorded.
+  The `VaultFloor→VaultEast` rise is now **100px**, `VaultEast→A_E` **60px**. A barrier authored
+  from the approved numbers would land in the wrong place.
+- **A2 — the vault is a load-bearing bot shortcut.** `Pier → VaultFloor → VaultEast → A_E` costs
+  **1.5**; the next-cheapest west-Crown-to-east-Crown route is **6.8**. Sealing the vault during
+  SETUP removes the arena's only Crown-level east–west crossing and re-routes bot traffic
+  arena-wide. **The RELIABLE subgraph's strong-connectivity/no-sink test must be re-run in the
+  sealed state**, with `VaultFloor`/`VaultEast` as named expected exceptions.
+- **A3 — sealing the two approaches is not enough; the chamber has an open ceiling.** There is an
+  **80px hole in the vault roof** between `VaultGateW`'s east edge (x1080) and `VaultEast`'s west
+  face (x1160). A body can jump west from `VaultEast` onto the header (a 24px rise over an 80px
+  gap — ordinary legal M1 movement) and drop through it onto the Relic. **The seal must close the
+  volume, not the walking routes.**
+- **A4 — there is no re-path mechanism at all.** `BotBrain._tick_roam` only reaches
+  `_decide_next()` when `executor == null` and `path.is_empty()`; a committed path runs to
+  completion or failure and nothing can interrupt it. Harmless in M3-1 (ROAM never changes its
+  mind), a real defect in M3-2 where OPEN changes every bot's destination mid-route. The traversal
+  audit named this directly.
+- **A5 — the 10-second reasoning measured the wrong leg.** "Roughly 3–4.5s puts any player at a
+  vault door" comes from Crown-entrance timings that start **at Band C**. Both floor spawns start
+  140px below it, and there is now exactly one reliable bot road up from the ground. Adding that
+  leg back puts a floor spawn at a door at roughly **8–9.5s**.
+
+**Also measured and recorded:** on the RELIABLE bot road network, P2's spawn (`B_E`) is roughly
+**twice as close** to the Relic as any other spawn (cost 2.2 vs 4.5/4.7/4.7). **This is a
+measurement finding only.** Per the standing "route-cost measurement is diagnostic, not normative"
+decision, **no spawn move, geometry change, route re-costing or slot-specific balancing is
+authorised.** A second, subtler finding: nav-graph edge costs are per-edge constants that ignore
+intra-platform walking distance, so P3 and P4 tie on graph cost while differing by ~1.2s of real
+travel — fairness instrumentation must therefore use **wall-clock arrival time as the primary
+number**, with graph cost secondary.
+
+---
+
+## 2026-09-09 — The Relic gate keeps its bars as the primary visual language; the bars lift
+
+**Status: ACCEPTED — Game Director revision at M3-2 plan approval, made after inspecting the live
+gate in Godot. Supersedes the solid-roof visual treatment the M3-2 plan originally proposed.**
+
+**Decision:** the accepted six vertical `RelicGate` bars remain the **primary player-facing
+representation of CLOSED** — the Relic reads as caged/locked, which the M2 playtest already
+validated and which the Director confirmed again visually. During UNLOCKING the **existing bars
+mechanically lift**; the vault is not re-skinned around a new solid-roof architecture.
+
+**The player's mental model must stay** *"the barred Relic gate is locked"*, **not** *"a giant roof
+block is preventing me from entering."*
+
+**Bar lift mechanics (greybox only):** the bars retract upward into the existing header — top edge
+fixed at y376, bottom edge travelling **y460 → y376** (84px), i.e. a portcullis withdrawing into
+its lintel. Implemented by animating each bar `ColorRect`'s `offset_bottom`; no new geometry, no
+bar passing through solid architecture. **The lift happens in the final portion of UNLOCKING**
+(working values: hold ~0.8s, lift over t≈8.8→10.0 against a 10s setup), `delta`-driven and
+therefore `time_scale`-safe. No production animation, VFX, particles or audio.
+
+**Physical sealing remains a hard requirement, and is separate from the visual gate.** A3 above is
+unchanged: the bars are cosmetic (zero collision) and giving them collision was already rejected in
+2026-09-06 as trap-creating. The physical seal is therefore **minimal anti-bypass collision**,
+visually subordinated to the existing header:
+
+- `VaultSealW` — **x 820–922, y 336–376** (102×40), plugs the west shaft.
+- `VaultSealE` — **x 1080–1160, y 336–376** (80×40), closes A3's roof hole.
+
+Both sit at **exactly the permanent header's y-range and thickness**, so they read as the existing
+lintel completing itself rather than as new architecture. The Director's revision made the seal
+**54% smaller** than the plan's original proposal (7,280 px² of new visible area vs 15,848): a thin
+strip suffices because the space below the west strip is reachable only from *inside* the chamber,
+so it never needed filling. **No large new visible walls.**
+
+**Hard rule during UNLOCKING:** the physical seal stays fully active for the entire bar lift. A
+player must not be able to enter merely because the animation has started. Automatic given the bars
+have no collision — but stated explicitly, and the bypass test must probe **while the bars are
+mid-lift**, not only while they are down.
+
+**At OPEN, one authoritative transition:** bars fully retracted · seal collision disabled and
+hidden · Relic monitoring on and brightened · gated NavGraph edges usable · bots receive
+`SEEK_RELIC` · HUD shows OPEN.
+
+**Known judgement call, deliberately left for STOP 1:** the seal strips must be *hidden* at OPEN,
+not merely made non-solid (a visible-but-walkthrough strip would be a lie), which means the header
+appears to shorten. Whether that reads as intentional or as a glitch is a Director inspection
+question; the recorded fallback is to give the strips their own subordinate shade.
+
+---
+
+## 2026-09-09 — Roof camping is allowed and instrumented for M3-2, not designed out
+
+**Status: ACCEPTED for the M3-2 prototype.**
+
+**Decision:** if a player can legally stand on the seal/header area during SETUP, and the OPEN
+transition drops that player toward or into the chamber, **that is allowed**. Do not pre-emptively
+prevent it.
+
+**Instrument:** whether each player was standing on a seal piece at OPEN, and whether that player
+subsequently won.
+
+**Treat roof-camping dominance as evidence to review later, not as an automatic geometry
+correction.**
+
+**Trap check (required by M3-A9):** the roof is not a trap — a body on it (x 820–1160, y336) exits
+east via a 24px step down onto `VaultEast` then a 60px step up onto `A_E`, or jumps 136px west back
+onto the Pier top. Both are comfortable and clear of R1's forbidden 155–184px band. **R9 must be
+re-proved by simulation in both gate states, with the roof added as a probe origin.**
+
+---
+
+## 2026-09-09 — M3-2 setup duration stays unresolved and data-driven
+
+**Status: ACCEPTED. Supersedes nothing; refines the 2026-09-06 "M3 setup is 10 seconds" entry.**
+
+**Decision:** ship the initial configurable **10s**, provide debug options **10 / 15 / 25**, and
+**take a real engine door-arrival measurement before selecting the default for human playtesting.**
+Do **not** change the duration on the strength of the reconstructed estimates in A5 above.
+
+**Hypothesis to validate against measured data, not to apply on sight:** OPEN should occur roughly
+**2–3 seconds after the slowest spawn can plausibly reach a door.**
+
+**Also approved:** an **OPEN-at-t=0 control round** — one round with the Relic collectible
+immediately — to test whether the setup phase earns its existence at all while there are no powers.
+If that round is more fun than the timed one, the phase's real justification is M4's powers, and
+that is a finding worth having before tuning a number that may not matter yet.
+
+**Unchanged:** ~25s remains the M4 working direction once powers give the setup phase content.
+
+---
+
+## 2026-09-09 — Relic winner tie-break: physics-frame overlap → closest to centre → slot ID
+
+**Status: ACCEPTED. Supersedes `M03_CORE_GAME_LOOP.md` §11.5's "lowest slot index wins on a
+same-frame tie."**
+
+**Decision:** do **not** resolve the winner from `body_entered` — signal emission order across
+simultaneous overlaps is an engine detail, not a stateable rule. Once per physics frame while the
+state is OPEN, poll `get_overlapping_bodies()` and resolve deterministically:
+
+1. one candidate → that player wins;
+2. several → the body whose `global_position.x` is closest to the Relic's centre (x=1000) — i.e.
+   whoever is furthest into the alcove;
+3. exact tie on distance → lowest `slot_id`.
+
+Then latch behind a `_collected` guard so collection fires exactly once by construction.
+
+**Why not the plain slot rule:** with four players and **player↔player collision OFF**, two bodies
+can genuinely occupy the same space, so a same-frame tie is a real possibility rather than a
+formality — and a pure slot rule would make **P1, the human, win every tie** in a milestone whose
+central question is whether racing the bots is fair. Distance-first keeps determinism, removes the
+systematic bias, and still degrades to the slot rule when it truly cannot decide.
+
+---
+
+## 2026-09-09 — M3-2 core match loop: PLAN APPROVED, implementation not started
+
+**Status: PLAN APPROVED by the Game Director. NO IMPLEMENTATION EXISTS.**
+Full plan: `docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md` (with
+`M03_2_CORE_MATCH_LOOP_PLAN.docx` as a review copy — the markdown wins if they disagree).
+
+**Approved architecture, for a fresh session that has not read the plan:**
+
+- Match states **SETUP → UNLOCKING → OPEN → RESULTS**, on one `MatchDirector`, `delta`-driven so it
+  survives `Engine.time_scale`. UNLOCKING is the tail of the setup timer, not an extra wait.
+- **`reset_round()` is a function, not a fifth state.** RESULTS holds a ~1.2s minimum dwell before
+  accepting rematch input.
+- **Plain M3-1 ROAM during SETUP** (Option A). Lightweight pre-positioning is explicitly rejected
+  for M3-2: it would erase the scattered-players → OPEN → visible-goal-switch → convergence
+  experiment the milestone exists to run, and collapse the fairness data's variance. Recorded as an
+  M4 question, where powers give it real content.
+- **`VaultFloor` is the single Relic graph target** — the Relic rests on it, and
+  `canonical_platform` already folds `VaultFloor_Bridge` into the same node. Both doors deliver a
+  bot onto that one node; bots use exactly the routes a human uses. Plus a small final "walk to the
+  Relic's x" arrival mode, since `_intra_node_wander` would otherwise pick a random x.
+- **Bot re-path at OPEN is grounded, not immediate:** OPEN sets a `goal_dirty` flag; the brain
+  cancels its executor/path only once its own per-bot reaction delay has elapsed **and** it is
+  `is_on_floor()` on a valid graph node (cap ~1.2s, then cancel anyway and let RECOVER work). This
+  fixes A4 while avoiding stale-`current_node` mid-air re-planning, and delivers the staggered
+  pivot §11.5 asked for. **No teleporting, no position writes, no physics exemptions.**
+- **Five gate-conditional nav edges** (`Pier→VaultFloor`, `A_E→VaultEast`, `VaultEast→VaultFloor`,
+  `VaultFloor→VaultEast`, `VaultEast→A_E`) become unusable while sealed, via an `edge.gated` flag
+  and one condition in `_weighted_cost`.
+- **RESULTS freezes controllers/brains**, never `get_tree().paused` and never `Engine.time_scale`
+  (which is reserved as the tempo A/B mechanism).
+- **Rematch rebuilds the `BotBrain` instances and resets the existing bodies** — no scene reload.
+  A fresh brain is a complete reset by construction, where a hand-written `reset()` enumerating 20+
+  fields would rot. Seeds must not collide across rounds (e.g.
+  `match_seed + round_index * 101 + slot_index`), and `player.gd::reset_to()`'s deliberate
+  non-clearing of `in_traversal_zone` must not be "tidied."
+- **Fairness is measured and reported before any balancing.** Dev-only, print-based telemetry;
+  every threshold is a flag for the Director, never a trigger for a change.
+- **Preserved:** player↔player collision **OFF** baseline, **1.0×** tempo, and all accepted M3-1
+  navigation.
+
+**Binding on the next session:** implementation begins at **Step 0** (re-run both checkers to
+confirm the inherited baseline — the engine was not run during planning, so this is unverified) and
+**stops at STOP 1**, which builds only the physical CLOSED seal, the existing bars in CLOSED
+position, a debug-key-driven bars-lifting prototype, the minimal anti-bypass collision, and
+optionally the Relic dim/bright states. **The `MatchDirector` loop, `SEEK_RELIC`, winner detection,
+results, rematch and fairness logic must not be built at Step 1** — not partially, not as disabled
+stubs — until the Director approves STOP 1 by visual inspection.

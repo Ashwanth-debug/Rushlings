@@ -141,8 +141,43 @@ multiplayer remain out of scope for M3-1 and are not addressed by this close-out
 **What the next session inherits:** an accepted four-player foundation with a fully reliable
 Floor→Band C bot road, a strongly-connected RELIABLE nav graph, and two permanent regression
 tools (`tools/arena_check.gd`, `tools/m3_check.gd` including its NAV STRESS mode). **M3-2 has not
-been started.** A fresh session implementing M3-2 should read Part Two (§11 onward) below, which
-was approved at plan time and has not changed.
+been started.** ~~A fresh session implementing M3-2 should read Part Two (§11 onward) below, which
+was approved at plan time and has not changed.~~ **Superseded 2026-09-09 — see §0.7.**
+
+---
+
+## 0.7 M3-2 plan approved (2026-09-09) — Part Two below is PARTLY SUPERSEDED
+
+**M3-2's authority is now `docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md`, not Part Two below.**
+Part Two is kept intact as the historical record of what was approved on 2026-09-06 and why.
+Read the new plan first; consult Part Two only for the reasoning behind decisions the new plan
+carries forward unchanged.
+
+**Status: M3-2 PLAN APPROVED. NO M3-2 IMPLEMENTATION EXISTS** — no gameplay code, scene, script,
+test or project setting. A fresh session begins at the new plan's **Step 0** and stops at
+**STOP 1**.
+
+**Where Part Two is superseded**, each recorded in full in `docs/DECISIONS.md` (2026-09-09):
+
+| Part Two says | Superseded by | Why |
+|---|---|---|
+| §11.4 — east barrier at `x 1140–1220`, `VaultEast` top at `y 320` | New plan §05 — `VaultEast` is live at **x 1160–1240, y 360–460** | The Director hand-edited the chamber after Part Two was written; barriers authored from the old numbers land in the wrong place |
+| §11.4 — seal "the two approaches" with free-standing barriers | New plan §05 — seal the **volume** via two thin roof strips at the header's own y-range | The chamber has an **80px hole in its ceiling** between `VaultGateW` (x1080) and `VaultEast` (x1160); barriers across the approaches leave it open |
+| §11.3 — telegraph is "a visible countdown plus a clear gate state change" | New plan §05 — **the existing six bars mechanically lift** in the final portion of UNLOCKING | Director revision 2026-09-09 after inspecting the live gate: the bars already read as a locked cage and stay the primary visual language |
+| §11.5 — "lowest slot index wins on a same-frame tie" | New plan §11 — physics-frame overlap poll → **closest to Relic centre** → slot ID | A pure slot rule makes P1 (the human) win every tie, in a milestone testing whether racing the bots is fair |
+| §11.2 / M3-A8 — 10s, A/B'd against 25s | New plan §04 — 10s configurable, **10/15/25** debug options, default chosen from a real engine door-arrival measurement | Part Two's "3–4.5s puts any player at a door" starts *at Band C*; both floor spawns start below it, and there is now one reliable road up from the ground |
+| §11.5 — bots switch `ROAM → SEEK_RELIC` after a reaction delay | New plan §08 — switch when the delay has elapsed **and the bot is grounded on a graph node** | `_update_localization()` only runs when `is_on_floor()`; cancelling mid-air leaves `current_node` stale and the bot re-plans from a platform it already left |
+
+**Carried forward from Part Two unchanged:** the four-state FSM shape, UNLOCKING as the tail of the
+setup timer (M3-A10), Option A camping-prevention *intent* (M3-A9) including "do not create traps",
+preserving the accepted decorative bars, the "arena geometry changes are limited to the vault
+seal" constraint, the named second-order risk that the rush may be decided by standing position,
+and the full out-of-scope list.
+
+**New in the M3-2 plan, with no Part Two equivalent:** gate-conditional nav edges (Part Two never
+noticed that five reliable edges pass through the sealed volume, or that the vault is a 4.5×
+Crown-level shortcut whose removal re-routes the arena); the grounded re-path mechanism; roof
+camping approved as instrumented behaviour; and the convergence/fairness telemetry.
 
 ---
 
@@ -665,7 +700,12 @@ Commit M3-1 as its own checkpoint on acceptance.
 
 # PART TWO — M3-2: CORE MATCH LOOP
 
-> **⛔ LOCKED. Do not implement any of Part Two until M3-1 is accepted (§10.5).**
+> **⛔ PARTLY SUPERSEDED 2026-09-09. The authority for M3-2 is
+> `docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md`** — see §0.7 above for the table of exactly which
+> statements below no longer hold. This section is preserved as the historical record of the
+> 2026-09-06 approval; **do not implement from it directly.**
+>
+> **Original note, kept:** LOCKED. Do not implement any of Part Two until M3-1 is accepted (§10.5).
 > This section is recorded now so the plan is complete, **not** so it can be started early.
 
 ---

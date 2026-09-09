@@ -233,9 +233,14 @@ Bots, powers, win condition, production art, online multiplayer.
 
 # M3 — Core Game Loop
 **Status: [~] IN PROGRESS — M3-1 (Four-player foundation) is [x] COMPLETE / ACCEPTED
-(2026-09-09). M3-2 (Core match loop) has explicitly NOT been started.** See
-`docs/plans/M03_CORE_GAME_LOOP.md` §0.5 and the 2026-09-06 through 2026-09-09 entries in
-`docs/DECISIONS.md` for the full implementation, diagnostic, and playtest log.
+(2026-09-09). M3-2 (Core match loop) is [ ] PLAN APPROVED (2026-09-09) / IMPLEMENTATION NOT
+STARTED.** See `docs/plans/M03_CORE_GAME_LOOP.md` §0.5–§0.7 and the 2026-09-06 through 2026-09-09
+entries in `docs/DECISIONS.md` for the full implementation, diagnostic, and playtest log.
+
+**⚠️ M3-2 implementation brief: `docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md`.** That document is the
+authority for M3-2 and supersedes Part Two (§11) of `M03_CORE_GAME_LOOP.md` wherever they differ.
+**No M3-2 gameplay code, scene, script, test or project setting exists yet.** A fresh session
+starts at its Step 0 and stops at **STOP 1** for Director inspection of the gate.
 
 **M3-1 close-out, for a session that hasn't read the whole log:** the vault exit, the traversal-
 audit topology fixes (three missing mandatory edges, explicit drop departure sides), a genuinely
@@ -255,11 +260,15 @@ and acceptance criteria below wherever they differ.
 | | Half | Contains | Ends with |
 |---|---|---|---|
 | **M3-1** | **Four-player foundation** | Slot architecture · controller abstraction · colour identity + toggleable P1–P4 labels · nav graph · edge executors · Dijkstra · roaming bots with a small curiosity/encounter bias · deterministic bot variation · recovery · checker extensions | **HARD STOP → human playtest A1 (1.0×) / A2 (1.25× `time_scale`) / A3 (1.0×) → Director acceptance → commit** |
-| **M3-2** | **Core match loop** | Match FSM · 10s setup timer · UNLOCKING telegraph (final ~2s) · vault sealing · gate CLOSED→OPEN · Relic collection · winner · results/rematch · bot goal switch | Playtest B1/B2/B3 → acceptance → commit |
+| **M3-2** | **Core match loop** | Match FSM · configurable setup timer · UNLOCKING bar-lift telegraph · physical vault sealing · gate CLOSED→OPEN · Relic collection · winner · results/rematch · bot goal switch | STOP 1 gate inspection → playtest B0/B1/B2/B3 → acceptance → commit |
 
-**A fresh session implements M3-1 only.** The functional Relic, gate state machine, setup timer,
-winner detection, results and rematch **must not be built** — not partially, not as disabled
-stubs — until the Game Director has played and accepted M3-1.
+**M3-1 is complete and accepted.** M3-2's plan is approved but **nothing in it is implemented**.
+A fresh session works from `docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md`, whose §19 defines the
+implementation order and five STOP points. **Step 1 builds the gate only** — the physical CLOSED
+seal, the existing bars in CLOSED position, a debug-key-driven bars-lift prototype, and the minimal
+anti-bypass collision. The `MatchDirector` loop, `SEEK_RELIC`, winner detection, results, rematch
+and fairness logic **must not be built** — not partially, not as disabled stubs — until the Game
+Director approves STOP 1 by visual inspection.
 
 **Work item #0 comes before all M3 gameplay code:** give `tools/arena_check.gd` an acknowledged-
 exception list for the accepted `B_Under` R7 finding and fix its Band A membership/coverage, so a
@@ -341,6 +350,35 @@ fixed-screen arena?** The Relic loop is deliberately not the first thing tested.
   development experiment only, not applied to any M1 constant.
 - `tools/m3_check.gd` (including its NAV STRESS mode and the ad hoc 5-minute soak variant) is
   permanent development/regression tooling from here on, alongside `tools/arena_check.gd`.
+
+## M3-2 — Plan approved 2026-09-09, implementation NOT started
+
+**Full plan: `docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md`.** Approved as the implementation
+direction with one revision to the gate treatment. Decision entries: `docs/DECISIONS.md`,
+2026-09-09.
+
+**Approved architecture:** SETUP → UNLOCKING → OPEN → RESULTS on one `delta`-driven
+`MatchDirector` · `reset_round()` as a function, not a fifth state · plain M3-1 ROAM during SETUP ·
+`VaultFloor` as the single Relic graph target · grounded bot re-path after OPEN with staggered
+per-bot reaction delays · deterministic winner by physics-frame overlap → closest-to-centre →
+slot ID · RESULTS freezes controllers/brains (never `paused`, never `time_scale`) · rematch
+rebuilds `BotBrain` instances and resets existing bodies · fairness measured and reported before
+any balancing · collision OFF and 1.0× tempo preserved · all accepted M3-1 navigation preserved.
+
+**Gate revision (the one change to the plan as submitted):** the existing six vertical `RelicGate`
+bars stay the **primary player-facing CLOSED language** — the Relic reads as caged — and they
+**mechanically lift** during the final portion of UNLOCKING. The vault is *not* re-skinned around a
+solid roof. Physical anti-bypass sealing is still mandatory (the chamber has a real 80px ceiling
+hole), but it is minimised to two thin strips at the existing header's own y-range and thickness,
+visually subordinate to it. The physical seal stays active for the whole bar lift.
+
+**Setup duration is deliberately unresolved:** ship 10s configurable, offer 10/15/25 debug options,
+and take a real engine door-arrival measurement before choosing the human-playtest default.
+~25s remains the M4 working direction once powers give the phase content.
+
+**Recorded, not acted on:** P2's spawn is ~2× closer to the Relic than any other on the bot road
+network. Measurement finding only — no spawn moves, geometry changes, route re-costing or
+slot-specific balancing are authorised.
 
 ## Critical Decision Gate
 If the game is not fun as shapes, do not proceed directly to art. Diagnose movement, arena and objective first.

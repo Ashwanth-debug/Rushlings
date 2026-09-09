@@ -42,13 +42,13 @@ Milestone 2 — Greybox Arena (Arena 01 V2, "The Gallery"): COMPLETE / ACCEPTED 
 - Full record: `docs/plans/M02_ARENA_01_V2.md` and the M2 entries in `docs/DECISIONS.md` (2026-09-06).
 - The Movement Lab (`scenes/movement_lab/`) is retained as a separate regression harness.
 
-Milestone 3-1 — Four-Player Foundation: COMPLETE / ACCEPTED (2026-09-09). Milestone 3-2 — Core Match Loop: NOT STARTED.
+Milestone 3-1 — Four-Player Foundation: COMPLETE / ACCEPTED (2026-09-09). Milestone 3-2 — Core Match Loop: PLAN APPROVED (2026-09-09), IMPLEMENTATION NOT STARTED.
 - Four player slots (P1 human, P2–P4 bots), a controller abstraction (`scripts/player_controller.gd`, `human_controller.gd`, `bot_controller.gd`), and a hand-authored nav graph + Dijkstra (`scripts/nav_graph.gd`, `nav_path.gd`, `edge_executor.gd`, `bot_brain.gd`) drive bot navigation with real M1 physics — no teleport cheating.
 - `Floor→C_M` is the one dependable, RELIABLE bot road up from the ground (a purpose-built fixed-trigger recipe with a bounded reposition/build-runway safety behaviour); `Floor→C_W`/`Floor→C_Seam` are SKILL/human-only by design — see `docs/DECISIONS.md` (2026-09-08).
 - `tools/m3_check.gd` (including NAV STRESS mode) is the permanent M3 navigation regression tool, alongside `tools/arena_check.gd`. Both must pass before any future navigation change.
 - Player↔player collision is OFF by default (dev toggle available); 1.0× is the accepted multiplayer tempo baseline.
 - Full record: `docs/plans/M03_CORE_GAME_LOOP.md` (§0.5–§0.6) and the M3-1 entries in `docs/DECISIONS.md` (2026-09-06 through 2026-09-09).
-- **M3-2 (setup timer, functional gate, Relic collection, winner, rematch) has not been started. Do not begin it without explicit Game Director direction.**
+- **M3-2 (setup timer, functional gate, Relic collection, winner, rematch) has an APPROVED PLAN but NO IMPLEMENTATION** — no gameplay code, scene, script, test or project setting exists for it. The authority is `docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md`, which supersedes Part Two (§11) of `docs/plans/M03_CORE_GAME_LOOP.md` wherever they differ (see that file's §0.7 for the supersession table). Work from the new plan's §19 order: begin at **Step 0** (re-run both checkers) and **stop at STOP 1**, which builds the gate only — physical CLOSED seal, existing bars in CLOSED position, a debug-key-driven bars-lift prototype, minimal anti-bypass collision. The MatchDirector loop, SEEK_RELIC, winner, results, rematch and fairness logic must not be built until the Game Director approves STOP 1 by visual inspection.
 
 ## Core Product Principle
 Do not build the beautiful game first. Build the smallest ugly playable game that proves the mechanic is fun.
@@ -221,5 +221,8 @@ It is done when:
 6. A Git checkpoint is created/pushed when requested.
 
 ## Immediate Next Milestone
-Milestone 3-2 — Core Match Loop (setup timer, functional gate, Relic collection, winner, rematch), on top of the accepted M3-1 four-player foundation.
-Do not implement automatically just because this file is read. First read `docs/ROADMAP.md`, `docs/plans/M03_CORE_GAME_LOOP.md` (§11 onward), and `docs/DECISIONS.md`, inspect the project, and prepare/confirm the Milestone 3-2 plan when asked.
+Milestone 3-2 — Core Match Loop (setup timer, functional gate, Relic collection, winner, rematch), on top of the accepted M3-1 four-player foundation. **The plan is approved; the implementation has not started.**
+Do not implement automatically just because this file is read. First read `docs/ROADMAP.md`, **`docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md`** (the M3-2 authority), `docs/plans/M03_CORE_GAME_LOOP.md` §0.7 (what it supersedes), and the 2026-09-09 entries in `docs/DECISIONS.md`; inspect the project; then follow the approved plan's §19 implementation order, halting at each STOP point for Game Director approval.
+
+## Documentation Deliverables
+Milestone plans, audits and reports are written into `docs/` — for milestone work, `docs/plans/` — as a Markdown file (the version a future session reads) and, when the Game Director wants a review copy, an accompanying Word `.docx`. Do not deliver plans as external links; the repository must stay self-sufficient. If both formats exist for one document, the Markdown is authoritative. Note `python-docx` is not installed globally on this machine — install it into the session scratchpad to generate a `.docx`.
