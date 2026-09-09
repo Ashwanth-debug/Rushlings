@@ -33,6 +33,28 @@ const PLAYER_SCENE_PATH := "res://scenes/player/player.tscn"
 
 var fails: Array[String] = []
 var warns: Array[String] = []
+var acknowledged: Array[String] = []
+
+# Findings that are known, deliberately not fixed, and must not silently
+# reappear as "the checker is broken" every M3+ run. Keyed on rule + exact
+# label + a substring of the expected detail text, so a DIFFERENT failure on
+# the same rule/label (e.g. B_Under's rise changing) does not match this entry
+# and fails normally instead of being swallowed. See docs/DECISIONS.md
+# (2026-09-06, "arena_check.gd gets an acknowledged-exception list").
+const ACKNOWLEDGED_EXCEPTIONS := [
+	{
+		"rule": "R7",
+		"label": "Band C -> Band B barrier: C_W -> B_Under",
+		"detail_contains": "landing platform 'B_Under' is 140px wide, needs >=280px",
+		"reason": "B_Under is a confirmed intentionally-hard-to-reach, high-value future pickup spot (docs/DECISIONS.md, 2026-09-06). Not to be simplified.",
+	},
+]
+
+func _acknowledged_exception(rule: String, label: String, detail: String) -> Dictionary:
+	for exc in ACKNOWLEDGED_EXCEPTIONS:
+		if exc.rule == rule and exc.label == label and detail.contains(exc.detail_contains):
+			return exc
+	return {}
 
 # M1 movement constants, read from the real Player scene's exported defaults
 # so this checker can never drift from the numbers that actually ship.
@@ -102,7 +124,7 @@ func _run() -> void:
 	_band_report("Floor", ["Floor"], true)
 	_band_report("Band C", ["C_Seam_west", "C_W", "C_M", "C_Seam"], true)
 	_band_report("Band B", ["B_Seam_west", "B_W", "Pier", "B_Under", "B_E", "B_Seam"], true)
-	_band_report("Band A (Crown)", ["A_W", "Pier", "VaultFloor", "VaultEast", "A_E"], false)
+	_band_report("Band A (Crown)", ["A_W", "A_W_Bridge", "Pier", "VaultFloor", "VaultEast", "A_E", "A_E_Bridge"], false)
 
 	print("\n--- R11: territory report (diagnostic only) ---")
 	_territory_report()
@@ -153,7 +175,12 @@ func _load_player_constants() -> void:
 func _load_arena() -> void:
 	arena = (load(ARENA_SCENE_PATH) as PackedScene).instantiate()
 	root.add_child(arena)
-	player = arena.get_node("Player")
+	# M3-1: the single "Player" node became four PlayerSlots. Slot1 is P1,
+	# the human-local slot, and is what this checker drives directly with
+	# raw input events exactly as before - Slots 2-4 are bot-controlled and
+	# roam independently for the whole run, which does not affect any static
+	# geometry check or Slot1's own route proofs.
+	player = arena.get_node("PlayerSlots/Slot1")
 
 func _aabb_of(body: Node2D) -> Dictionary:
 	var cs := body.get_node("CollisionShape2D") as CollisionShape2D
@@ -215,6 +242,13 @@ func _extract_geometry() -> void:
 # --- Reporting ---------------------------------------------------------------
 
 func _report(rule: String, label: String, verdict: String, detail: String) -> void:
+	if verdict == "FAIL":
+		var exc := _acknowledged_exception(rule, label, detail)
+		if not exc.is_empty():
+			var ack_line := "[%s] %-46s %-5s %s" % [rule, label, "ACK", detail]
+			print(ack_line + "  (ACKNOWLEDGED: %s)" % exc.reason)
+			acknowledged.append(ack_line)
+			return
 	var line := "[%s] %-46s %-5s %s" % [rule, label, verdict, detail]
 	print(line)
 	if verdict == "FAIL":
@@ -227,6 +261,9 @@ func _print_summary() -> void:
 	print("Failures: %d" % fails.size())
 	for f in fails:
 		print("  " + f)
+	print("Acknowledged exceptions (do not gate PASS/FAIL): %d" % acknowledged.size())
+	for a in acknowledged:
+		print("  " + a)
 	print("Warnings / diagnostics: %d" % warns.size())
 	for w in warns:
 		print("  " + w)
@@ -335,7 +372,8 @@ func _check_edge(label: String, a_name: String, b_name: String, tagged_skill: bo
 
 func _static_audit() -> void:
 	var edges := [
-		["Floor -> CoverW (step)", "Floor", "CoverW", false],
+		# CoverW removed from Arena 01 (Director decision, human-playtest-
+		# driven M3 level-design adjustment) - no longer audited here.
 		["Floor -> CoverE (step)", "Floor", "CoverE", false],
 		["Floor -> C_W (step, everywhere)", "Floor", "C_W", false],
 		["Floor -> C_M (step, everywhere)", "Floor", "C_M", false],
@@ -556,7 +594,7 @@ func _test_east_gateway_enter() -> bool:
 func _test_east_gateway_exit() -> bool:
 	var vault_east: Dictionary = geom["VaultEast"]
 	await _place_player(Vector2(vault_east.center.x, vault_east.top - player_half_h))
-	if not await _run_and_jump_near_edge("VaultEast", 1, 20.0, 200):
+	if not await _vertical_clear_jump_near_edge("A_E", 1, 20.0, 200):
 		return false
 	if not await _wait_until(func(): return player.is_on_floor(), 200, "land on A_E"):
 		return false
@@ -689,6 +727,35 @@ func _run_and_jump_near_edge(platform_name: String, dir: int, edge_margin: float
 	if not await _wait_until(cond, max_ticks, "run to edge of %s" % platform_name):
 		return false
 	return await _tap_jump()
+
+# Mirrors EdgeExecutor's _advance_vertical_clear_jump recipe (Director
+# investigation, 2026-09-08, via the dev-only traversal recorder): walk
+# toward the TARGET's own near edge (not the departure platform's far edge -
+# opposite convention from _run_and_jump_near_edge above), release
+# horizontal, jump with ZERO horizontal hold (no attempt to clear the wall
+# mid-ascent), hold zero until the apex, THEN steer onto the target. Used
+# for VaultEast, where _run_and_jump_near_edge's generic "clear it in
+# flight" model is the exact recipe already confirmed unreliable for this
+# specific obstacle. `target_name` is the edge's "to" platform (e.g. "A_E"
+# for the VaultEast->A_E hop), matching EdgeExecutor's own to_near_edge.
+func _vertical_clear_jump_near_edge(target_name: String, dir: int, edge_margin: float, max_ticks: int) -> bool:
+	_hold(dir)
+	var to: Dictionary = geom[target_name]
+	var near_edge: float = to.left if dir > 0 else to.right
+	var cond := func():
+		if not player.is_on_floor():
+			return false
+		return abs(_shortest_diff(near_edge, player.global_position.x)) <= edge_margin
+	if not await _wait_until(cond, max_ticks, "approach %s" % target_name):
+		return false
+	_hold(0)
+	await _tick()
+	if not await _tap_jump():
+		return false
+	if not await _wait_until(func(): return player.velocity.y >= -50.0, max_ticks, "reach apex before %s" % target_name):
+		return false
+	_hold(dir)
+	return true
 
 func _ensure_on_ground(max_ticks: int = 400) -> bool:
 	if _on_platform("Floor"):
@@ -1038,19 +1105,37 @@ func _drop_to_band_c(target_name: String) -> bool:
 	var to_right: float = abs(_shortest_diff(cur.right, x))
 	var dir := -1 if to_left <= to_right else 1
 	var edge_x: float = cur.right if dir > 0 else cur.left
-	_hold(dir)
 	# The origin needs to clear the edge by more than a few px - the body is
 	# player_half_w wide, so anything less still leaves it resting on the
 	# platform's corner (is_on_floor stays true, nothing ever falls).
 	var clear_buffer: float = player_half_w + 4.0
 	var cleared := func():
 		return (dir > 0 and player.global_position.x >= edge_x + clear_buffer) or (dir < 0 and player.global_position.x <= edge_x - clear_buffer)
-	if not await _wait_until(cleared, 300, "walk off %s" % cur_name):
-		return false
-	# Release input the moment the edge is cleared, not after landing - the
-	# drop is ~260px and holding a direction the whole way down drifts well
-	# past the target below (this is what carried a B_W departure past C_W
-	# and into the launch shaft beyond it).
+	# A real player walks off a ledge slowly, not at a dead sprint - and
+	# deceleration is floor-only, so any speed still carried at the moment
+	# the origin leaves the platform survives untouched through the whole
+	# fall. Holding one direction all the way to the edge reaches ~500px/s
+	# well before arriving, then drifts ~240px on a ~260px drop - this is
+	# exactly what carried a B_W departure past C_W into the launch shaft
+	# beyond it, and is why every spawn reported NO PROVEN ROUTE at the M2
+	# baseline (docs/plans/M03_CORE_GAME_LOOP.md §3.3). Creeping the final
+	# stretch at a low speed cap (bang-bang: accelerate below it, release
+	# above it) keeps just enough residual momentum to clear the edge while
+	# drifting only a fraction as far - the same recipe edge_executor.gd
+	# uses for the real bots' drop edges.
+	var creep_range := 120.0
+	var speed_cap := 80.0
+	var t := 0
+	while not cleared.call():
+		var dist_to_edge: float = abs(_shortest_diff(edge_x, player.global_position.x))
+		if dist_to_edge <= creep_range:
+			_hold(0 if abs(player.velocity.x) >= speed_cap else dir)
+		else:
+			_hold(dir)
+		await _tick()
+		t += 1
+		if t > 300:
+			return false
 	_hold(0)
 	if not await _wait_until(func(): return player.is_on_floor(), 300, "fall to %s" % target_name):
 		return false
@@ -1208,10 +1293,11 @@ func _run_until_wrap(dir: int, max_ticks: int) -> bool:
 
 func _wrap_integrity() -> void:
 	var floor_origin_y: float = geom["Floor"].top - player_half_h
-	# CoverW/CoverE are deliberate solid cover blocks on the Floor (x 620-760
-	# and 1180-1320) - a straight run across the whole Floor would slam into
-	# them. Start close to each departure edge, past both blocks, for a clear
-	# runway to the wrap point.
+	# CoverE is a deliberate solid cover block on the Floor (x 1180-1320) - a
+	# straight run across the whole Floor would slam into it (CoverW, the
+	# matching west-side block, was removed from Arena 01 - see docs/
+	# DECISIONS.md). Start close to each departure edge, past CoverE, for a
+	# clear runway to the wrap point.
 	for c in [
 		{"dir": 1, "start": Vector2(1850.0, floor_origin_y), "label": "Floor, wrapping east-to-west", "platform": "Floor"},
 		{"dir": -1, "start": Vector2(70.0, floor_origin_y), "label": "Floor, wrapping west-to-east", "platform": "Floor"},

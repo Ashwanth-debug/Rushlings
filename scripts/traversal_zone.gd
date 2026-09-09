@@ -3,6 +3,10 @@ extends Area2D
 @onready var _shape: CollisionShape2D = $CollisionShape2D
 
 func _ready() -> void:
+	# Players moved to a dedicated layer 2 (post-A1/A2 playtest collision-
+	# toggle fix, see player.gd) - this Area2D's default mask (layer 1 only)
+	# would otherwise stop detecting them entirely.
+	set_collision_mask_value(2, true)
 	body_entered.connect(_on_body_entered)
 	body_exited.connect(_on_body_exited)
 

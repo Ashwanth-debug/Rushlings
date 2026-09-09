@@ -17,6 +17,16 @@ const ArenaWrapScript := preload("res://scripts/arena_wrap.gd")
 ## is environmental traversal and should reach places a jump cannot.
 @export var jump_strength: float = 900.0
 
+## Assigned at spawn by whoever builds the match (arena_01.gd via
+## MatchConfig). player.gd never constructs one itself and never reads Input
+## directly - this is the entire human/bot/(reserved)network seam. See
+## docs/DECISIONS.md (2026-09-06, "A player slot's controller is data").
+var controller: PlayerController
+
+## Identity, set at spawn. slot_id is 1-based (P1-P4).
+@export var body_color: Color = Color(0.9, 0.2, 0.2)
+var slot_id: int = 1
+
 var in_traversal_zone: bool = false
 var is_climbing: bool = false
 
@@ -34,8 +44,61 @@ var climb_top_limit: float = -INF
 func _ready() -> void:
 	# Opts this body into the arena's horizontal wrapping.
 	add_to_group(ArenaWrapScript.WRAPPABLE_GROUP)
+	if controller == null:
+		controller = HumanController.new()
+	$ColorRect.color = body_color
+	if has_node("Label"):
+		$Label.text = "P%d" % slot_id
+	# BUG FIX (post-A1/A2 playtest): players must leave the default world
+	# layer (1) entirely and live ONLY on the dedicated "players" layer (2).
+	# The original code added layer 2 on top of the default layer 1 without
+	# ever removing layer 1, and left the mask's default layer-1 bit in
+	# place too - so every player still matched every other player on the
+	# shared layer-1 bit regardless of the layer-2 toggle (Godot collides
+	# two bodies if EITHER's mask includes the other's layer, checked in
+	# both directions). World detection still works because the mask
+	# below always includes layer 1 - world geometry's own layer - so
+	# world<->player collision is unaffected; only player<->player
+	# collision is now actually gated by layer 2.
+	set_collision_layer_value(1, false)
+	set_collision_layer_value(2, true)
+	set_collision_mask_value(1, true)
+	set_player_collision_enabled(false)
+
+## Ladders and the launch pad are Area2D nodes whose default mask (layer 1)
+## no longer matches a player's layer now that players live on layer 2 only
+## - see traversal_zone.gd and launch_pad.gd, which both add layer 2 to
+## their own mask in _ready() for exactly this reason.
+func set_player_collision_enabled(enabled: bool) -> void:
+	set_collision_mask_value(2, enabled)
+
+## Called by arena_01.gd after instancing, since a child's _ready() runs
+## before its parent's - by the time arena_01.gd can assign real per-slot
+## identity, this node's own _ready() has already applied its export
+## defaults once. Idempotent, safe to call any time.
+func configure(new_slot_id: int, new_color: Color) -> void:
+	slot_id = new_slot_id
+	body_color = new_color
+	$ColorRect.color = body_color
+	if has_node("Label"):
+		$Label.text = "P%d" % slot_id
+
+func set_label_visible(visible_flag: bool) -> void:
+	if has_node("Label"):
+		$Label.visible = visible_flag
+
+## Dev-only nav stress test display (Director feedback, iteration 4): shows
+## this bot's current commanded destination under the "P%d" name, e.g.
+## "P2\nUpper Right (Crown)". suffix == "" restores the plain "P%d" name -
+## used both to clear it when returning to NORMAL_ROAM and for the human
+## player slot, which never has a stress destination.
+func set_debug_suffix(suffix: String) -> void:
+	if not has_node("Label"):
+		return
+	$Label.text = ("P%d\n%s" % [slot_id, suffix]) if suffix != "" else ("P%d" % slot_id)
 
 func _physics_process(delta: float) -> void:
+	controller.update(delta)
 	var horizontal_intent := _get_horizontal_intent()
 	var vertical_intent := _get_vertical_intent()
 	var wants_jump := _get_jump_intent()
@@ -85,32 +148,20 @@ func _update_climb_state(vertical_intent: float) -> void:
 		is_climbing = true
 
 # --- Input intent -------------------------------------------------------
-# The only three places a concrete input device is read. Mobile touch/gesture
-# controls (M5) replace these function bodies and nothing else - no movement
-# physics below or above depends on which device produced the intent.
-#
-# Prototype keyboard mapping, deliberately context sensitive:
-#   outside a traversal zone   A/Left, D/Right = move   W/Up = jump   Space = jump
-#   inside a traversal zone    A/Left, D/Right = move   W/Up = climb up
-#                              S/Down = climb down      Space = jump off ladder
+# The only three places movement reads intent from - and since M3-1, all
+# three delegate to `controller` rather than reading a device directly. This
+# is the human/bot/(reserved)network seam: HumanController reads Input
+# exactly as before, BotController reads the nav-graph layer's decisions, and
+# nothing in this class or below ever knows which one is driving it.
 
 func _get_horizontal_intent() -> float:
-	return Input.get_axis("move_left", "move_right")
+	return controller.horizontal()
 
 func _get_vertical_intent() -> float:
-	var intent := 0.0
-	if Input.is_action_pressed("vertical_intent_up"):
-		intent -= 1.0
-	if Input.is_action_pressed("vertical_intent_down"):
-		intent += 1.0
-	return intent
+	return controller.vertical()
 
 func _get_jump_intent() -> bool:
-	if Input.is_action_just_pressed("jump"):
-		return true
-	# Up doubles as jump, but only away from a ladder - inside a traversal zone
-	# it means climb up instead.
-	return not in_traversal_zone and Input.is_action_just_pressed("vertical_intent_up")
+	return controller.jump_pressed(in_traversal_zone)
 
 # --- External events ----------------------------------------------------
 

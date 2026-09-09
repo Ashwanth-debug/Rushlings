@@ -27,6 +27,13 @@ Working direction:
 - No minimap because the screen itself is the map.
 - No scrolling level in baseline mode.
 
+**Future platform direction (not current scope):** the long-term platform target extends beyond
+mobile to Steam/desktop, alongside Android + iOS. A future desktop release also raises the
+possibility of local/couch multiplayer with multiple physical controllers on one machine — a
+different social configuration from phone-based play. Neither is implemented now; no controller
+assignment, storefront APIs or desktop-specific input work is in scope until a dedicated platform
+milestone. See the "Future / Parking Lot" section of `docs/ROADMAP.md`.
+
 ## 5. Camera / Arena Format
 Chosen direction: straight-on 2D side view.
 
@@ -195,6 +202,27 @@ Desired behavior:
 - Very obvious protective state.
 - Should encourage timing, not permanent safety.
 
+### Future Exploration — Arena-Reactive Powers (Hypothesis, Not Approved)
+Not approved final behavior. This is a design direction to prototype and playtest at the powers
+milestone (M4) — it does not authorize implementation now, and must not leak into M3.
+
+**Broader principle:** the arena itself can become part of the power system. Rather than treating
+powers only as player-vs-player attacks, they can be explored as temporary ways of manipulating
+traversal, positioning and shared space — turning routes, platforms and traversal mechanisms into
+targets, not just other players.
+
+**Freeze as a concrete example:**
+- **Direct Freeze** — the currently-described behavior above: freeze/slow another player directly.
+- **Environmental Freeze** — freeze a floor or platform surface so players slide on it, or make a
+  ladder slippery/temporarily difficult to climb. A player could use Freeze on arena geometry
+  rather than (or in addition to) another player.
+
+Both must be prototyped and playtested before either is treated as real Rushlings behavior — this
+section records a hypothesis worth exploring, not a commitment. Any future gameplay telemetry work
+(see "Future Direction — Human-Learned Bot Intelligence" below) should be capable of recording
+environmental power usage if this direction is pursued, so learned bots could eventually imitate
+how humans manipulate the arena, not just how they target other players.
+
 ### Power Rules
 - Collect by touching pickup.
 - No separate pickup button.
@@ -227,10 +255,24 @@ Future:
 - Bot takeover on disconnect is a possible multiplayer feature.
 - Six-player mode is an exploration, not a current commitment.
 
+**Validated at M3-1 (2026-09):** four simultaneous characters make Arena 01 substantially more
+alive and fun than solo exploration suggested — the strongest signal from the four-player
+foundation milestone. 1.0× is the accepted tempo baseline for four-player play; a faster tempo
+that read as exciting in solo debug playback read as merely fast-forwarded with four bodies
+active, a reminder that movement-feel findings from single-player tuning don't automatically
+transfer to the player count the game is actually built for.
+
 ## 13. Bots
 Bots exist first to make the game testable by one person.
 
 No LLM/ML required.
+
+**Navigation principle, validated at M3-1 (2026-09):** a small reliable bot road network beats a
+complete-but-unreliable traversal graph. Bots should route only through arena transitions proven
+reliable for them; a human player may use additional traversal options a bot does not rely on for
+ordinary navigation. This is not a limitation to design away — it's the accepted shape of the
+RELIABLE/SKILL split, and it kept a real M3-1 bug (bots repeatedly failing at, and getting stuck
+near, traversal a human could do easily) from ever reaching players.
 
 Baseline bot reasoning:
 - Understand current location.
@@ -248,6 +290,11 @@ Later difficulty/personality ideas:
 - Greedy: prioritizes objective.
 - Troublemaker: prioritizes interference.
 Do not build these until core bot loop works.
+
+A longer-term, distinct direction — bots that learn behavioral patterns from real human gameplay
+rather than relying entirely on hand-authored logic — is recorded separately in §24, "Future
+Direction — Human-Learned Bot Intelligence." That direction does not change the deterministic,
+no-LLM/no-ML baseline above; it is future exploration, not current scope.
 
 ## 14. Characters — Rushlings / Tiny Relic Hunters
 Primary direction: Tiny Relic Hunters.
@@ -446,3 +493,49 @@ Later:
 - Multiplayer invite conversion.
 
 The strongest early qualitative signal is: **“Again.”**
+
+## 24. Future Direction — Human-Learned Bot Intelligence (Hypothesis, Not Approved)
+Not current scope. Nothing here is implemented, and nothing here overrides §13's baseline: bots
+remain deterministic/state-machine/utility/pathfinding logic, and **no LLM or ML is required** for
+the shippable game. This section records a long-term direction worth investigating once the core
+loop and powers are stable — real human gameplay, not hand-authored heuristics alone, as the
+eventual source of bot believability.
+
+The goal is explicitly **not** an omniscient or perfect AI. The goal is bots that behave like
+believable Rushlings players: they should still make mistakes, react imperfectly, use different
+routes, and remain beatable.
+
+### Stage 1 — Gameplay telemetry
+Once the core match loop and powers are stable, investigate recording privacy-conscious gameplay
+events, such as:
+- Spawn/player slot.
+- Arena region.
+- Route/traversal choices (wrap, drop, ladder, launcher, etc.).
+- Jump, ladder, launcher and wrap usage.
+- Power pickup and which power was selected.
+- Power use, including player-vs-environment targeting (see the Arena-Reactive Powers hypothesis
+  under §10).
+- Nearby opponents/context (chase/escape situations).
+- Relic state and Relic approach behavior.
+- Match outcome.
+
+Avoid collecting unnecessary personal information. This stage is data collection only — no
+behavior changes as a result of it.
+
+### Stage 2 — Statistical human imitation
+Before any machine learning, investigate aggregated human behavior distributions — for example, at
+a given decision point, humans wrap 45% of the time, drop 30%, use a ladder 20%, and choose
+something else 5%. Bots could sample from actual observed human tendencies rather than arbitrary
+hardcoded weights. The goal is human-like and varied behavior, not mathematically optimal behavior.
+
+### Stage 3 — Player-style modeling
+Explore whether real gameplay naturally reveals distinct player styles — for example, explorer,
+hunter, runner, trickster, high-ground/control player, risk-taker. **These are hypotheses only, not
+approved archetypes.** If real data supports them, future bots could mimic different real play
+styles rather than a single generic bot personality.
+
+### Stage 4 — Learned bot intelligence
+Only after enough real gameplay data exists, evaluate behavior cloning/imitation learning, offline
+learning from gameplay traces, and reinforcement learning where appropriate. Do not assume an LLM
+is required — the appropriate technique depends on what the data actually supports. As above, the
+goal remains believable, beatable Rushlings players, not a perfect opponent.

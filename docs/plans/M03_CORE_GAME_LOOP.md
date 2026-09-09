@@ -1,7 +1,148 @@
 # M3 — Core Game Loop
 
-**Status: APPROVED PLAN (2026-09-06). NOT IMPLEMENTED.**
+**Status: APPROVED PLAN (2026-09-06). M3-1 COMPLETE / ACCEPTED (2026-09-09). M3-2 NOT STARTED.**
 Approved by the Game Director in the M3 planning/audit session, with ten amendments (§0).
+See **§0.5 M3-1 status and playtest log** for what has actually happened since approval —
+this section supersedes the original plan's assumptions wherever a playtest or an
+implementation finding has since overridden them, but the original plan text below is kept
+intact as the historical record of what was approved and why. **§0.6 records the acceptance
+close-out.** The hard approval gate at §10.5 held throughout: nothing in Part Two (§11 onward,
+M3-2) was implemented before acceptance, and none of it is implemented by this close-out either.
+
+---
+
+## 0.5 M3-1 status and playtest log (2026-09-06 – 2026-09-08, historical)
+
+**Status at the time this section was written: NOT accepted. Superseded by §0.6 below — M3-1 is
+now ACCEPTED. Kept intact as the historical record of the diagnostic path that led there.**
+
+Multiple human-playtest → automated-fix → re-playtest iterations have happened since the
+plan below was approved. This section records what changed and what is still open, without
+rewriting the original plan (§0–§10) — read both.
+
+### Confirmed findings (durable — see docs/DECISIONS.md for the dated decision entries)
+
+- **Four simultaneous players are fun.** Arena 01 feels substantially more alive with four
+  active bodies than the M2 one-player exploration sessions suggested. This is the single
+  most important M3-1 signal so far.
+- **1.0× is the current preferred four-player baseline**, not 1.25×. The 1.25× tempo felt
+  exciting in solo M2-era debug playback, but with four bodies simultaneously active it reads
+  as somewhat fast-forwarded rather than exciting. `Engine.time_scale` stays the mechanism for
+  any future A/B — no M1 movement constant has been touched.
+- **Player↔player collision OFF remains the M3-1 baseline**, confirmed via dedicated
+  layer/mask tests (both the "pass through, still collide with world" and "physically
+  separate when ON" states) and via playtest. The dev toggle stays available.
+- **Navigation philosophy changed**: reliable navigation now matters more than giving bots
+  access to every theoretically possible human traversal. Ordinary bot pathfinding (both
+  NORMAL ROAM and NAV STRESS) now uses a **RELIABLE vs SKILL/HUMAN-OPTIONAL** edge
+  classification — SKILL edges are excluded from ordinary bot routing entirely, not kept as a
+  penalized fallback (an earlier "heavy penalty, still usable" version was tried and
+  explicitly rejected — it let bots keep selecting moves already known to fail
+  inconsistently). A bot whose target requires a SKILL-only edge fails/re-paths rather than
+  attempting it. Human players are unaffected — SKILL edges remain real, legal M1 traversal,
+  just not ones the bot AI is expected to rely on for M3-1.
+- **`CoverW` was removed from Arena 01.** Human playtesting showed multiple bots repeatedly
+  converging on and visibly failing around it; automated analysis confirmed it was not
+  required for arena connectivity and its removal disconnects no required macro-region. This
+  is a level-design change, not a bug workaround — see docs/DECISIONS.md for the full record.
+  `CoverE` (its counterpart) remains, currently skill-tagged for bots.
+- **NAV STRESS (explicit destination testing) is now the preferred way to validate
+  navigation capability**, over NORMAL ROAM. NORMAL ROAM is not expected to demonstrate final
+  Rushlings bot intelligence — bots currently have no real gameplay objective (that is
+  M3-2/M4's job), so ROAM only needs to look like competent wandering, not purposeful play.
+  NAV STRESS gives each bot an explicit, distinct sequence of destinations (spanning floor,
+  west, east, upper/Crown, seam/wrap, and central/vault-approach) and measures whether it
+  reliably arrives, which is a much more direct signal of navigation-graph health than
+  watching ROAM behavior and trying to judge whether it "looks smart."
+
+### Vault exit reliability — RESOLVED (2026-09-08)
+
+**Was the critical path to M3-1 acceptance; now closed.** Full account in docs/DECISIONS.md's
+2026-09-07/08 entries. Summary of how it actually resolved (not the path originally expected):
+
+- A two-tread staircase geometry redesign (`VaultStepA`/`VaultStepB`) was implemented and
+  empirically tested, then **rejected and reverted** after the Game Director tested the
+  *original* `VaultEast` geometry by hand and repeatedly entered/exited successfully. This
+  proved the geometry was never the defect — bot execution was. **Do not redesign this
+  chamber's geometry again** without new, explicit Director direction.
+- A small dev-only human-traversal recorder (`scripts/traversal_recorder.gd`) captured the
+  Director's actual technique across three consistent demonstrations: release horizontal
+  before jumping, jump with zero horizontal hold (straight up beside the obstacle, not trying
+  to clear it in flight), hold zero through the ascent, steer only after the apex.
+- That recipe is now `EdgeExecutor._advance_vertical_clear_jump`, scoped to exactly the two
+  affected edges (`VaultFloor→VaultEast`, `VaultEast→A_E`) via an explicit edge flag - it does
+  not touch `_advance_jump` or any other edge's behavior, and no M1 movement constant changed.
+- Both edges are now classified **RELIABLE**. `tools/arena_check.gd` returns a clean
+  `RESULT: PASS`, zero failures, including the previously-failing East gateway exit test
+  (updated to use the same recipe, since the old generic test primitive was exactly the
+  technique already known to be unreliable here).
+
+### What this means for the next session
+
+Do not re-litigate the four-player/tempo/collision findings above — they are settled per
+docs/DECISIONS.md. Do not start M3-2 without explicit Director acceptance of M3-1. With the
+vault exit now resolved, re-run NAV STRESS and the full M3-1 acceptance checklist to confirm
+nothing else is outstanding before asking the Director for final M3-1 acceptance.
+
+---
+
+## 0.6 M3-1 acceptance close-out (2026-09-09)
+
+**M3-1 is ACCEPTED. Full record: `docs/DECISIONS.md`, 2026-09-06 through 2026-09-09 entries.**
+
+The vault-exit resolution above (§0.5) was not the end of the story — a traversal audit
+(`docs/plans/Arena01_Traversal_Audit.docx`) found the *real* remaining blocker was a navigation
+topology/state problem, not a physics one: the reliable graph had no working way up from the
+ground at all, and three real transitions were missing from `nav_graph.gd` entirely. Resolved in
+order:
+
+1. **Explicit drop departure side** — `_advance_drop` no longer infers which edge to depart from
+   by comparing the target's centre to the body's position (wrong whenever the target's centre
+   falls inside the source platform's own extent); every drop edge now authors `"side"` as data.
+2. **Three missing mandatory edges** — `B_Seam→C_Seam`, `A_W→B_W`, `A_E_Bridge→B_Seam` (the last
+   via a new RUN_DROP recipe). With these, the RELIABLE subgraph became strongly connected except
+   the two audit-predicted exceptions (`CoverE`, `B_Under`).
+3. **Launcher evaluated for Floor→Band C, not promoted** — multi-position, both-direction testing
+   showed it only clears the bar from the east; stays SKILL.
+4. **`Floor→C_M` fixed-trigger recipe** — a new, edge-scoped recipe made `Floor→C_M` the one
+   dependable central bot road up from the ground (5/5 across a spread of positions).
+5. **Navigation-policy correction** — a 5-minute NAV STRESS soak (the first time navigation health
+   was measured over minutes, not seconds) found bots still preferred the still-broken direct
+   `Floor→C_W`/`Floor→C_Seam` edges over the `C_M` detour purely on Dijkstra cost, and that this
+   was *also* the root cause of bots trapped/bouncing in the `CoverE`/`C_M` Floor pocket.
+   `Floor→C_W`/`Floor→C_Seam` demoted to SKILL/HUMAN-ONLY — cost tuning cannot fix a cost-ordering
+   problem; only removing the edges from RELIABLE-only routing does.
+6. **Reposition/build-runway fix** — with `Floor→C_M` as the sole gateway, its own rare failure
+   mode (jump anyway when too close/too slow — "the unsafe fallback") became fully exposed
+   (Slot 4: 0 arrivals, ~83 stall events, permanently parked). Removed and replaced with a bounded
+   REPOSITION phase mirroring the human traversal-recorder technique: back off, rebuild a real
+   runway, re-approach. Verified against the exact live bad-start position, expanded to a 12-case
+   multi-position/multi-velocity matrix (12/12), and confirmed by a second 5-minute soak: Slot 4
+   went from 0 arrivals to 18/18, 0 stalls, all destination categories passing for every bot.
+7. **A debug-label bug was fixed alongside it** — `current_stress_destination()` now respects the
+   intentional 3-loop NAV STRESS cap (`"(sequence complete)"` instead of a stale fake destination),
+   which was the exact cause of the earlier-reported "stuck in the Vault" symptom (it was never
+   stuck — the label lied). A **`B`** debug key now restarts all three stress sequences for
+   extended human observation without restarting the game.
+
+**Final human playtest (2026-09-09), 1.0×, collision OFF, NAV STRESS enabled:** P2/P3/P4 all
+navigated successfully, completed their full navigation sequences, moved across every arena
+region, vertical traversal worked, Floor was no longer a practical trap, the `CoverE`/`C_M` pocket
+no longer produced a blocking trap, Vault traversal remained functional, and no persistent
+stuck/jump-spam behaviour was observed. **Accepted.**
+
+**Explicitly deferred, not reopened at this close-out:** `B_Under` human-reachability/design
+question; launcher remains SKILL for normal bots; other known human/skill-only traversal edges
+(`A_W_Bridge→Pier`, the two Vault far-edge jumps, `C_Seam→A_E_Bridge`, `C_W→B_Under`,
+`B_Seam↔B_W`); pre-existing non-load-bearing checker warnings. Bot strategic intelligence, powers,
+combat, Relic seeking, learned/human-imitation bot intelligence, networking, and couch/controller
+multiplayer remain out of scope for M3-1 and are not addressed by this close-out.
+
+**What the next session inherits:** an accepted four-player foundation with a fully reliable
+Floor→Band C bot road, a strongly-connected RELIABLE nav graph, and two permanent regression
+tools (`tools/arena_check.gd`, `tools/m3_check.gd` including its NAV STRESS mode). **M3-2 has not
+been started.** A fresh session implementing M3-2 should read Part Two (§11 onward) below, which
+was approved at plan time and has not changed.
 
 ---
 

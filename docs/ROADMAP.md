@@ -232,7 +232,20 @@ Bots, powers, win condition, production art, online multiplayer.
 ---
 
 # M3 — Core Game Loop
-**Status: [ ] NOT STARTED — plan approved 2026-09-06**
+**Status: [~] IN PROGRESS — M3-1 (Four-player foundation) is [x] COMPLETE / ACCEPTED
+(2026-09-09). M3-2 (Core match loop) has explicitly NOT been started.** See
+`docs/plans/M03_CORE_GAME_LOOP.md` §0.5 and the 2026-09-06 through 2026-09-09 entries in
+`docs/DECISIONS.md` for the full implementation, diagnostic, and playtest log.
+
+**M3-1 close-out, for a session that hasn't read the whole log:** the vault exit, the traversal-
+audit topology fixes (three missing mandatory edges, explicit drop departure sides), a genuinely
+reliable `Floor→C_M` fixed-trigger bot route (with its own reposition/build-runway safety
+behaviour), and the resulting `Floor→C_W`/`Floor→C_Seam` demotion to SKILL/HUMAN-ONLY together
+resolved the Floor "one-way drain" problem that blocked earlier playtests. Final human playtest
+(1.0×, collision OFF, NAV STRESS enabled) confirmed all three bots navigate reliably across every
+region, vertical traversal works, and no persistent stuck/trap behaviour remains. Four
+simultaneous players are confirmed substantially more alive and fun than solo M2 exploration.
+1.0× is the accepted multiplayer tempo baseline (1.25× stays a recorded experiment only).
 
 **Implementation brief: `docs/plans/M03_CORE_GAME_LOOP.md`.** That document supersedes the scope
 and acceptance criteria below wherever they differ.
@@ -300,6 +313,34 @@ fixed-screen arena?** The Relic loop is deliberately not the first thing tested.
   only in a separate tuning pass with a full checker re-run.
 - **Setup duration is 10s for M3 only**, with a 10 vs 25 A/B at M3-2. It does not supersede the
   ~25s working direction for M4 when powers exist.
+
+## M3-1 Closeout — DONE (2026-09-09)
+- **Accepted** by the Game Director after the final human playtest: 1.0×, collision OFF, NAV
+  STRESS enabled. All three bots navigated reliably and completed their full destination
+  sequences, moved across every arena region, used ladders/wrap/launcher-adjacent traversal as
+  appropriate, and showed no persistent stuck/jump-spam behaviour. Full record:
+  `docs/DECISIONS.md`, 2026-09-06 through 2026-09-09 entries.
+- Four-player foundation, controller abstraction, hand-authored nav graph + Dijkstra, deterministic
+  bot variation, recovery/stall handling, and the RELIABLE/SKILL routing policy are all accepted
+  as-is — no changes planned before M3-2.
+- **The Floor "one-way drain" is resolved**: three missing mandatory topology edges were added,
+  explicit drop departure sides fixed a direction-inference bug, and `Floor→C_M` became the sole
+  RELIABLE Floor→Band C bot route via a purpose-built fixed-trigger recipe (with its own bounded
+  reposition/build-runway safety behaviour) — `Floor→C_W`/`Floor→C_Seam` are SKILL/human-only.
+  Confirmed by a 5-minute NAV STRESS soak, not just a single playtest window.
+- **One pre-existing acceptance-criterion note, not reopened:** "all four spawns report a proven
+  route" in `arena_check.gd`'s own route-cost table (added at plan approval, above) was never
+  literally retired — that specific harness still reports 4 `NO PROVEN ROUTE` warnings, unchanged
+  since the M2 baseline. This predates the Director's decision (recorded in
+  `docs/plans/M03_CORE_GAME_LOOP.md` §0.5) that NAV STRESS — real `BotBrain`/`EdgeExecutor`
+  destination testing over minutes, not this harness's own simplified two-approach simulation — is
+  the actual authority on navigation health going forward. The Director's acceptance is based on
+  that stronger evidence; the older warning is recorded here rather than silently dropped, and is
+  not a blocker.
+- **1.0× confirmed as the accepted multiplayer tempo baseline**; 1.25× remains a recorded
+  development experiment only, not applied to any M1 constant.
+- `tools/m3_check.gd` (including its NAV STRESS mode and the ad hoc 5-minute soak variant) is
+  permanent development/regression tooling from here on, alongside `tools/arena_check.gd`.
 
 ## Critical Decision Gate
 If the game is not fun as shapes, do not proceed directly to art. Diagnose movement, arena and objective first.
@@ -590,5 +631,15 @@ Not baseline commitments:
 - Advanced bot personalities.
 - Boss/Ancient Guardian events.
 - Different objective modes.
+- Steam/desktop platform release, alongside Android + iOS.
+- Local/couch multiplayer on desktop with multiple physical controllers.
+- Human-learned bot intelligence (gameplay telemetry → statistical imitation → player-style
+  modeling → learned/trained bots). Full four-stage direction recorded in `docs/GAME_DESIGN.md`
+  under "Future Direction — Human-Learned Bot Intelligence." Does not change the current
+  hand-authored, deterministic bot baseline.
+- Arena-reactive powers (e.g. Freeze affecting floors/ladders, not just players) and the
+  broader "arena as part of the power system" hypothesis. Recorded in `docs/GAME_DESIGN.md`
+  near §10 (Powers). Not approved behavior — to be prototyped and playtested at the powers
+  milestone (M4), not implemented now.
 
 These require separate validation and should not leak into early milestones.

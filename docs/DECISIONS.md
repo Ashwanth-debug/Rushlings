@@ -812,3 +812,432 @@ acceptance criterion.**
 **Related:** the executors' recipes are not invented — they are the checker's already-proven route
 primitives (`_run_and_jump_near_edge`, `_drop_to_band_c`, the ladder-climb blocks, and
 `_route_launcher`'s 12-tick steering delay), re-shaped from `await` coroutines into per-frame state.
+
+---
+
+## 2026-09-07 — Four players confirmed fun; 1.0× confirmed as the four-player baseline
+
+**Status: RECORDED from human playtest. M3-1 finding.**
+
+**Finding:** four simultaneous bodies in Arena 01 are substantially more alive and engaging than
+the M2 single-player exploration sessions suggested — this is the strongest M3-1 signal so far and
+validates continuing the milestone.
+
+**Tempo A/B result:** using the approved `Engine.time_scale` method (see the 2026-09-06 tempo A/B
+entry above), 1.25× was re-tested with all four players active. Where 1.25× felt exciting in solo
+M2-era debug playback, with four active players it instead feels somewhat fast-forwarded rather
+than exciting — there is more simultaneous information to read (three other bodies, not one), and
+the faster clock compresses the time available to read it. **1.0× is the current preferred
+four-player baseline.** This does not overturn the original tempo A/B method or invalidate a future
+retest — it is a finding at the current player count and arena, not a permanent verdict on 1.25×.
+
+**Why this matters:** it is a reminder that movement-feel findings from single-player tuning
+sessions do not automatically transfer to the multiplayer condition Rushlings is actually built
+for. Any future tempo/feel tuning should be (re-)validated at four-player count, not solo.
+
+---
+
+## 2026-09-07 — Player↔player collision OFF confirmed as the M3-1 baseline
+
+**Status: CONFIRMED. M3-1 baseline.**
+
+**Decision:** player↔player physical collision stays **OFF** for M3-1. Players still collide with
+world geometry; they do not physically block or separate from each other. A dev toggle to switch
+it on for comparison remains available in debug builds.
+
+**Why:** tested directly against the ON state (physical separation on contact) via a dedicated
+layer/mask comparison plus playtest. OFF reads as more readable and less frustrating at this stage
+— four bodies jostling for the same narrow ladder/vault-approach geometry with collision ON adds
+friction that isn't yet earned by a real objective (M3-2). This is the current baseline, not a
+final ruling on collision for all future milestones — interference-via-contact may become relevant
+again once powers (M4) or ghost mode are explored.
+
+---
+
+## 2026-09-07 — Bot navigation moves to RELIABLE-only routing; SKILL edges are excluded, not penalized
+
+**Status: DECIDED. Supersedes the earlier "heavily-penalized-but-still-usable" fallback model.**
+
+**Decision:** every traversal edge in the nav graph is classified **RELIABLE** or
+**SKILL / HUMAN-OPTIONAL** (a third class, **INVALID**, marks edges that don't actually connect
+their endpoints and are reported rather than hidden). Ordinary bot pathfinding — both NORMAL ROAM
+and NAV STRESS — uses RELIABLE edges only; SKILL edges are excluded from the bot's route-cost graph
+entirely (effectively infinite cost), not included at a high-but-finite penalty. A bot that cannot
+reach its target using RELIABLE edges alone fails that pathfind and re-paths toward a new target,
+rather than repeatedly attempting an edge it cannot reliably complete.
+
+**Why:** an earlier version penalized SKILL edges heavily but still allowed the pathfinder to pick
+them when nothing cheaper existed. In practice this meant bots kept selecting exactly the moves
+already known to fail inconsistently (e.g. the pre-fix `VaultFloor → VaultEast` jump), producing
+the stuck/retry loops seen in human playtest (P3 cycling near the vault, bots repeatedly clipping
+`CoverW`). Reliable navigation — a bot that goes where it means to go, using moves it can actually
+execute — is more valuable at this stage than theoretical access to every human-legal traversal.
+Human players are unaffected: SKILL edges remain real, legal M1 movement for a human player: the
+classification only constrains what the **bot AI** is expected to rely on for M3-1.
+
+**Consequence:** if a target region is only reachable via SKILL edges from a bot's current
+position, that is now visible in tooling as a real gap (see NAV STRESS below), not silently
+papered over by a penalized-but-available fallback.
+
+---
+
+## 2026-09-07 — `CoverW` removed from Arena 01
+
+**Status: DECIDED by the Game Director from human playtest evidence. Level-design change, not a
+bug workaround.**
+
+**Decision:** `CoverW` is permanently removed from Arena 01 — not hidden, not kept as a
+stale/INVALID nav-graph node. `NavGraph`, `ArenaRegions`, `tools/arena_check.gd`, `tools/m3_check.gd`
+and related code no longer reference it. Its counterpart `CoverE` is retained (currently
+skill-tagged for bots).
+
+**Why:** human playtest video showed multiple bots repeatedly converging on and visibly failing
+around `CoverW`. Investigation (case-study requested by the Director, not a unilateral engineering
+call) confirmed it was not required for any macro-region's connectivity and that removing it
+disconnects nothing that RELIABLE routing depended on. Rather than keep tuning bot behavior around
+a piece of geometry that was reliably confusing bots, the Director chose to remove it from the
+arena.
+
+**Not yet decided:** whether `CoverW` (or a different piece of cover geometry) is reintroduced
+elsewhere in Arena 01 later. No replacement is planned as part of M3.
+
+---
+
+## 2026-09-07 — NAV STRESS (explicit destinations) is the preferred navigation validation method
+
+**Status: DECIDED. Testing/tooling policy for M3-1 and future navigation work.**
+
+**Decision:** `BotBrain`'s `NAV_STRESS_TEST` mode — an explicit, per-bot sequence of distinct
+destinations spanning floor, west, east, upper/Crown, seam/wrap and central/vault-approach regions
+— is the preferred way to validate that bot navigation is reliable, over judging `NORMAL_ROAM`
+behavior by eye. Toggled in-game via the debug control (key `N`).
+
+**Why:** `NORMAL_ROAM` is not expected to demonstrate final Rushlings bot intelligence, because
+bots currently have no real gameplay objective — that arrives with M3-2 (Relic-seeking) and M4
+(powers). Judging navigation quality from ROAM means judging "does this look like smart wandering,"
+which is a weak, subjective signal. NAV STRESS instead asks a direct, measurable question — given
+an explicit destination, does the bot reliably arrive — which is exactly what the RELIABLE-routing
+change above needs verified. NAV STRESS results are the harness of record for vault-exit and other
+navigation-reliability work going forward.
+
+---
+
+## 2026-09-07 — OPEN: `VaultFloor → VaultEast` exit is not yet reliable (M3-1 blocker)
+
+**Status: OPEN / BLOCKED. Not resolved. No solution chosen. M3-1 cannot be accepted until this is
+closed.**
+
+**Background:** the Game Director rejected the original `VaultFloor → VaultEast` exit as too
+unreliable for bot use and asked for the smallest local Arena 01 geometry adjustment that makes it
+a comfortable, repeatable exit using accepted M1 movement — explicitly without changing M1
+movement/tuning, without redesigning the vault, without making entry easier merely to solve exit,
+and without adding any teleport-style recovery.
+
+**Fixed so far:** the original failure mode — the jump clipping `VaultGateW` or `VaultEast`'s own
+wall mid-ascent, which is what visibly trapped a bot inside the vault during human playtest — is
+fixed and confirmed via direct executor testing. There is no more wall/gate collision on this edge.
+
+**What's still broken:** a *different*, previously-masked problem is now the blocker. M1's jump is
+a fixed ballistic arc with no in-air deceleration (friction is floor-only in the M1 movement
+model). A takeoff speed fast enough to clear the wall in time keeps travelling at that same locked
+horizontal speed for the entire flight, and overshoots `VaultEast`'s narrow landing width, landing
+on `A_E` instead of `VaultEast`. In short: the timing that solves wall-clearance (an *ascending*
+concern) and the timing that solves landing accuracy (a *descending* concern, much later in the
+same fixed arc) pull in opposite directions, and M1's ballistic model gives no way to reconcile
+them with a single takeoff speed.
+
+**Why widening the platform hasn't worked:** every `VaultEast` widening/repositioning configuration
+tried so far conflicts with `tools/arena_check.gd`'s own established static safety rules — notably
+its R1 "columns overlap forbidden range" step-up check and R7 "landing platform width" check,
+specifically around `VaultEast`'s proximity to `B_E`. The checker is treated as authoritative here:
+a geometry change that makes the checker fail is not an acceptable fix, even if it happens to solve
+the overshoot in isolated testing.
+
+**Explicitly ruled out:** changing M1 movement/tuning to solve this local geometry problem.
+
+**Not yet decided (for the Game Director next session):** whether to accept a visually larger
+`VaultEast`, pursue a different local geometry change elsewhere in the chamber, or invest in a more
+capable in-air "aim for landing" executor model (a materially larger change than local geometry
+tuning, and out of scope for a quick fix). Until one of these is chosen and verified,
+`VaultFloor → VaultEast` remains classified **SKILL**, not RELIABLE, and ordinary bot pathfinding
+does not rely on it.
+
+---
+
+## 2026-09-07 — Two-tread vault staircase (VaultStepA/VaultStepB) implemented, tested, and REJECTED
+
+**Status: REVERTED. Superseded by the 2026-09-08 entry below — do not redesign this geometry.**
+
+**What happened:** approved as a Director decision, a two-tread staircase (`VaultStepA` then
+`VaultStepB`, replacing the single flush-wall `VaultEast`) was fully implemented — scene geometry,
+nav graph, `arena_regions.gd`, `bot_brain.gd` labels, and both checkers. Extensive empirical testing
+(real `EdgeExecutor`/`BotController`, multiple starting positions and speeds) found it was **not
+reliable**, for three separate, compounding reasons: `VaultGateW`'s ~28px of standing headroom means
+any ascent beginning under its x-span (920–1080) head-bonks before clearing it; a tread low enough to
+be a "small comfortable rise" also blocks ordinary walking underneath it; and M1's fixed
+`jump_strength`/no-air-deceleration model makes a full-speed departure from `VaultFloor`'s necessary
+width travel 290–390px+ before the descending height-crossing for any legal "comfortable" (≤150px)
+rise — smaller rises travel *further*, not less.
+
+**Why it was reverted:** the Game Director tested the **original** `VaultEast` geometry directly and
+repeatedly entered/exited the vault successfully by hand. This proved the geometry itself was never
+the defect — `BotController`/`EdgeExecutor` simply could not reproduce a traversal a human performs
+easily. The staircase geometry was removed and `VaultEast` restored exactly. **Do not attempt another
+geometry redesign of this chamber without new, explicit Director direction** — the fix belongs in bot
+execution, not level design.
+
+---
+
+## 2026-09-08 — Vault exit solved via a human-traversal recorder + a local "vertical-clear jump" bot recipe
+
+**Status: DECIDED. `VaultFloor → VaultEast → A_E` is now RELIABLE.**
+
+**Decision:** rather than continue tuning bot jump physics by theory, a small dev-only instrument
+(`scripts/traversal_recorder.gd`, toggled with the `debug_record_traversal` key, P1-only, no
+persistence) was added to capture the Director's own successful manual traversal — position,
+velocity, grounded state, intents, platform, and takeoff/landing events per physics tick.
+
+**Finding:** across three independent full demonstrations, the Director's technique was completely
+consistent for both hops (`VaultFloor→VaultEast` and `VaultEast→A_E`): run to the obstacle, **release
+horizontal input before jumping**, jump with **zero horizontal hold** (a pure vertical impulse — the
+body doesn't try to clear the wall in flight, it goes straight up beside it, sidestepping the
+clearance problem instead of timing around it), hold zero horizontal through the whole ascent, and
+only steer toward the target once the apex is reached (`vel.y` back near zero). This is the opposite
+of `EdgeExecutor`'s existing `_advance_jump` model, which tries to avoid wall contact via an adaptive
+speed cap and then preserves a *locked, nonzero* horizontal velocity for the whole flight.
+
+**Implementation:** a new, edge-scoped recipe, `EdgeExecutor._advance_vertical_clear_jump`, gated by
+an explicit `{"vertical_clear": true}` edge flag — used only for `VaultFloor→VaultEast` and
+`VaultEast→A_E`. It does not touch `_advance_jump` or change behavior for any other edge in the game,
+and no M1 movement constant (`max_speed`, `acceleration`, `gravity`, `jump_strength`, etc.) changed.
+
+**Verification:** tested via a real `EdgeExecutor`+`BotController` from four starting positions
+spanning `VaultFloor`'s realistic entry range; succeeded cleanly on both hops from every realistic
+position (the one failure was an artificial start placed directly inside `VaultEast`'s own collision
+volume — not a position the edge's own walk phase would ever produce). `arena_check.gd`'s East
+gateway exit test (also updated to use the same recipe, since its previous generic "clear it in
+flight" primitive was exactly the technique already known to be unreliable here) now passes.
+`tools/arena_check.gd` returns a clean `RESULT: PASS`, zero failures.
+
+**Why this matters beyond the vault:** the human technique — release horizontal, jump vertically,
+steer only after the apex — may generalize to other awkward-approach obstacles if similar reliability
+gaps surface elsewhere. Not applied speculatively; kept scoped to the two edges it was proven on.
+
+---
+
+## 2026-09-08 — Traversal audit (`Arena01_Traversal_Audit.docx`) diagnosed the real blocker: a topology/state problem, not a physics problem
+
+**Status: ACCEPTED.** Full audit preserved at `docs/plans/Arena01_Traversal_Audit.docx`.
+
+**Finding:** with the vault resolved, `tools/m3_check.gd` still reported bots pooling on Floor,
+oscillating near `CoverW`-adjacent geometry, and four spawns with `NO PROVEN ROUTE`. The audit's
+diagnosis: **the reliable navigation graph had no working way up from the ground**, and three real
+arena transitions (`B_Seam→C_Seam`, `A_W→B_W`, `A_E_Bridge→B_Seam`) were missing entirely from
+`nav_graph.gd`. This was a graph/topology and edge-executor defect, not an arena or M1 physics
+defect — confirmed by re-simulating the live scene and cross-checking against a real headless run.
+
+**Implemented, smallest-plan order (`docs/plans/M03_CORE_GAME_LOOP.md` §0.5 history; audit steps
+01–03):**
+- **Step 01 — explicit drop departure side.** `edge_executor.gd`'s `_advance_drop` was inferring
+  which edge of the source platform to depart from by comparing the *target's* centre to the
+  body's position — wrong whenever the target's centre falls inside the source platform's own
+  extent (engine-confirmed: `B_W→C_W` stalled into the Pier's wall for the full timeout, every
+  time). Every drop edge in `nav_graph.gd` now authors its own `"side"` ("left"/"right") as data;
+  the executor reads it instead of inferring. A second, related bug found during multi-position
+  regression (not center-only) testing: the drop "cleared the edge" check compared raw,
+  non-wrap-aware coordinates — `B_Seam` is the first drop source whose extent straddles the wrap
+  boundary, so a body that had just wrapped read as "already past the edge" on tick one. Fixed via
+  `geometry.shortest_diff`, matching every other direction check in the file.
+- **Step 02 — three mandatory topology edges.** `B_Seam→C_Seam`, `A_W→B_W` (both ordinary creep
+  drops), and `A_E_Bridge→B_Seam` (a new **RUN_DROP** recipe — full-speed departure to clear a
+  genuine 130px horizontal gap alongside the 260px fall, gated by an `edge.run_drop` flag, one
+  branch in `_advance_drop`, no effect on any other edge). All three verified 5/5 across a spread
+  of realistic start positions. With them, the RELIABLE subgraph became strongly connected except
+  two audit-predicted, still-standing exceptions: `CoverE` (skill-only by design) and `B_Under`
+  (physically 0.09px beyond the jump's rise ceiling, not reclassified this pass).
+- **Step 03 — launcher evaluated for Floor→Band C, not promoted.** Multi-position/both-direction
+  testing (both an isolated harness and the upgraded official one) showed the launcher only
+  clears the bar from the east approach; a west (or wrap-equivalent) approach reliably clips
+  `C_Seam`'s western overhang mid-launch (observed: rises ~44px of an intended ~511px). Real
+  success rate ~60%, well under the reliability bar. **Launcher stays SKILL for normal bot
+  routing**, unchanged — exactly the audit's own predicted risk, confirmed.
+
+**Test suite upgraded to match** (`tools/m3_check.gd`): edge validation now samples ≥5 positions
+across each source platform's walkable span and reports PASS only if *every* position succeeds
+(a centre-only test is exactly how `Floor→C_W`/`Floor→C_M` previously read PASS while failing
+constantly in play); a new node-level strong-connectivity + no-sink assertion (with a narrow named-
+exception list) replaced the old region-level check, which only asked "is *some* node in each
+region reachable from Floor" — precisely how `B_Seam`'s total orphan status went undetected before.
+
+---
+
+## 2026-09-08 — `Floor→C_M` fixed-trigger jump: the one dependable, central bot road up from the ground
+
+**Status: ACCEPTED.**
+
+**Decision:** with three Floor→Band C jump edges (`C_W`, `C_M`, `C_Seam`) all still failing in
+real play (the audit's own diagnosis: the generic `_advance_jump` recipe computes an *adaptive*
+safe-speed ceiling that *shrinks* as the body nears the wall — correct for a genuine gap, backwards
+for an ascending target, where less distance means less time and therefore needs *more* speed, not
+less), the Director directed a narrower fix: make `Floor→C_M` alone genuinely reliable, via a new,
+edge-scoped **fixed-trigger** recipe (`_advance_fixed_trigger_jump`, gated by `edge.fixed_trigger`),
+rather than touching the shared adaptive recipe every other jump edge still depends on.
+
+**The recipe:** approach at full speed; jump only once the body is inside a *fixed* distance window
+before the wall (`trigger_far`/`trigger_near`, edge metadata — 100/60px for this edge, matching the
+audit's own modelled range) **and** at the required approach speed. Both the window and the
+takeoff point are derived at runtime from the live target AABB, never a hardcoded coordinate — the
+same edge tag generalises to any future fixed-trigger edge without a code change. Verified 5/5
+across a spread of realistic Floor positions on both sides of `C_M`, then confirmed a second time
+inside the official multi-position harness.
+
+**Floor→C_W and Floor→C_Seam were deliberately left untouched and unfixed** in this same pass — see
+the navigation-policy correction below for why that changed one week later.
+
+---
+
+## 2026-09-08 — Navigation-policy correction: `Floor→C_W`/`Floor→C_Seam` demoted to SKILL, not merely re-costed
+
+**Status: ACCEPTED.**
+
+**The problem, found by a 5-minute NAV STRESS soak test (the first time navigation health was
+measured over minutes rather than seconds):** even with `Floor→C_M` proven reliable, bots kept
+selecting the still-broken direct `Floor→C_W`/`Floor→C_Seam` edges far more often than the new
+`C_M` gateway (255 attempts vs. 51 over one soak run) — because Dijkstra compares a *target's*
+route cost, and the direct edge's flat cost (0.7) undercuts any real `C_M`-detour route (0.6+0.9=
+1.5) no matter how `C_M` itself is priced. **Re-costing cannot fix this — only removing the direct
+edges from RELIABLE-only routing does.** The same mechanism was also the root cause of a second
+reported symptom: bots visibly trapped/bouncing in the Floor pocket between `CoverE` and `C_M`
+(`CoverE` sits entirely inside `C_M`'s own footprint) — not because `CoverE` was ever a chosen
+target (confirmed: it is correctly unreachable via RELIABLE-only routing), but as an incidental
+side effect of repeatedly walking toward the still-selected, still-broken direct edges, which cross
+straight through that pocket from most Floor positions. Measured dwell time: 66–72% of an entire
+5-minute run, for two of three bots.
+
+**Decision:** `Floor→C_W` and `Floor→C_Seam` are reclassified **SKILL / HUMAN-ONLY** — not merely
+re-costed. Ordinary bot pathfinding never selects them; `Floor→C_M` is now the sole RELIABLE Floor→
+Band C bot road, with the already-corrected topology carrying bots the rest of the way. Human
+players are unaffected — both remain real, legal M1 traversal for a human, exactly as every other
+skill-tagged edge in the graph already works.
+
+**Bot navigation principle established by this finding, worth keeping:** **a small reliable bot
+road network beats a complete-but-unreliable traversal graph.** Humans may have — and are expected
+to have — traversal options bots do not normally rely on; that asymmetry is a feature of the
+skill/reliable classification, not a gap to be closed by teaching bots every human move.
+
+---
+
+## 2026-09-08 — `Floor→C_M` reposition/build-runway fix, and the NAV STRESS debug-label cap bug
+
+**Status: ACCEPTED. Both confirmed by a 5-minute soak test before and after.**
+
+**Bug 1 — the debug label lied about "stuck."** `BotBrain.current_stress_destination()` (the label
+a human reads during a NAV STRESS playtest) computed `stress_index % sequence.size()` unconditionally,
+but the function that actually decides what to pursue, `_pick_stress_target()`, deliberately stops
+once a bot's sequence completes 3 full loops ("a run long enough to prove the sequence works doesn't
+need to repeat forever") — after which the real logic settles into `AT_REST`/wander, while the label
+kept showing a plausible, entirely fictitious destination forever after. This exactly reproduced the
+human report ("reached the Vault three times, destination shows Lower Floor, stays in the Vault") —
+the bot was not stuck; it was *done*, and the label never said so. **Fixed:** the label now returns
+`"(sequence complete)"` once the cap is reached, with a regression test (`m3_check.gd` Test 9)
+asserting this at, below, and arbitrarily far past the cap. The underlying 3-loop cap itself is
+unchanged — this was a display bug only.
+
+**Development-only affordance added alongside it:** a **`B`** debug key
+(`debug_restart_nav_stress`, `arena_01.gd::restart_nav_stress()`) resets all three bots'
+`stress_index`/arrivals without restarting the game or touching any other state, so a human can
+observe a completed run again rather than having "(sequence complete)" cap a playtest at ~100–120s.
+
+**Bug 2 — the real cause of the remaining Floor trap, once `Floor→C_M` became the sole gateway.**
+With no fallback edge left, `Floor→C_M`'s own rare failure mode became fully exposed: a bot that
+begins or retries the edge already inside/too close to the 60–100px takeoff window with insufficient
+approach speed previously **jumped anyway** ("the unsafe fallback"), clipped `C_M`'s underside
+(concretely: walked straight into `CoverE`'s solid face, which sits entirely inside `C_M`'s own
+footprint, and stalled there for the whole edge timeout), fell back to ~the same position, and
+repeated indefinitely — confirmed live (Slot 4: 0 arrivals, ~83 stall events, permanently parked for
+a full 90s run).
+
+**Decision — reposition/build-runway, mirroring the human technique already recorded for this edge
+family:** the unsafe fallback is removed. `_advance_fixed_trigger_jump` now enters a bounded
+**REPOSITION** phase — walk away from the target until a real runway is re-established, then hand
+back to the ordinary approach — whenever any of: (a) too close without approach speed, (b) held
+intent producing no real motion for >0.25s (physically blocked, e.g. by `CoverE`), or (c) the body
+has already crossed the target's near edge (a state unreachable via this recipe's own walk phase,
+but reachable via residual velocity from elsewhere — multi-position testing found jumping from
+*past* the edge gives asymmetric, much thinner clearance over `CoverE` than the same distance
+measured on the correct side). The runway distance is derived entirely from the edge's own
+`trigger_far`/`min_speed_frac` and the body's own `acceleration`/`max_speed`
+(`d = v²/(2a)` + a fixed margin) — never a hardcoded coordinate. Bounded: max 2 reposition
+attempts per edge execution, 3s max per attempt, a clear `FAILED` if no runway can be established.
+
+**Verified:** the exact live bad-start range (`x≈1344.7–1358.4`, both sides mirrored) now
+reliably backs off, rebuilds speed, and lands on `C_M` — no teleporting. Expanded multi-position
+test (`m3_check.gd`): 12/12, covering far/medium/ideal-window/inside-window-zero-velocity/inside-
+window-wrong-direction-velocity/immediately-adjacent on both approach sides. Post-fix 5-minute
+soak: Slot 4 went from 0 arrivals/~83 stalls/never-leaves-Floor to **18/18 arrivals, 0 stalls, all
+5 regions, all 4 bands** — and all seven NAV STRESS destination categories (West, East, Lower/Floor,
+Upper Left, Upper Right, Seam/Wrap, Central/Vault Approach) passed for every bot. `CoverE` dwell
+time is reduced but not eliminated (bots still legitimately transit near it) — no longer a trap,
+which was the actual scope of the fix.
+
+**Human traces informed both the vault exit recipe and this one** — recorded here as the second,
+independent confirmation of the same pattern: `scripts/traversal_recorder.gd` (dev-only, P1-only,
+no persistence) captures a real player's technique, which becomes the model for a bot recipe. This
+is an early, small-scale validation of the direction recorded in `docs/GAME_DESIGN.md` §24
+("Future Direction — Human-Learned Bot Intelligence") — **M3 remains deterministic, authored
+behaviour, not ML or telemetry-trained bots**; what transferred here was a human *demonstrating a
+technique to a developer*, who then hand-authored it as a recipe, not a system learning from
+gameplay data.
+
+---
+
+## 2026-09-09 — Milestone 3-1 (Four-Player Foundation): COMPLETE / ACCEPTED
+
+**Status: ACCEPTED.** Final human playtest, 1.0×, collision OFF, NAV STRESS enabled: P2/P3/P4 all
+navigated successfully and completed their full navigation sequences, bots moved across different
+arena regions, vertical traversal worked, Floor was no longer a practical trap, the `CoverE`/`C_M`
+pocket no longer produced a blocking trap, Vault traversal remained functional, and no persistent
+stuck/jump-spam behaviour was observed. **M3-2 has explicitly not been started.**
+
+**Major outcomes, for a session that hasn't read the whole log:**
+
+- **Four simultaneous players are substantially more alive and fun** than the M2 one-player
+  exploration sessions suggested — the single most important M3-1 signal, confirmed and unchanged
+  since it was first observed.
+- **1.0× is the accepted current multiplayer tempo baseline.** 1.25× remains recorded as a
+  development experiment only — it felt exciting in solo M2-era debug playback but "somewhat
+  fast-forwarded" with four bodies simultaneously active. `Engine.time_scale` stays the only
+  approved mechanism for any future retest; no M1 movement constant was ever touched.
+- **Bot navigation principle:** a small reliable bot road network beats a complete-but-unreliable
+  traversal graph. Humans may use traversal options bots do not; that's a feature of the
+  RELIABLE/SKILL split, not a gap.
+- **Human demonstrations informed two bot recipes** (the vault exit's vertical-clear technique, and
+  `Floor→C_M`'s reposition/build-runway technique) — a small, real, deterministic-only precursor to
+  the human-learned-bot-intelligence hypothesis in `docs/GAME_DESIGN.md` §24, not an instance of it.
+- **The Floor "one-way drain" is fully diagnosed and resolved:** the original `Floor→C_W`/
+  `Floor→C_M`/`Floor→C_Seam` jump edges were falsely classified reliable (passing a centre-only
+  test while failing constantly in dynamic play); bots accumulated on Floor with no dependable way
+  up. Fixed in two layers — corrected topology (the three missing mandatory edges) plus a genuinely
+  reliable `Floor→C_M` fixed-trigger route with its own reposition/build-runway safety behaviour —
+  and `Floor→C_W`/`Floor→C_Seam` demoted to SKILL so bots never fall back onto the broken direct
+  routes. Confirmed resolved by a 5-minute NAV STRESS soak test, not merely a single playtest
+  session.
+- **`tools/m3_check.gd`'s NAV STRESS mode (and the ad hoc 5-minute soak variant) are permanent
+  development/regression tooling, not gameplay** — the preferred way to validate navigation health
+  going forward, over judging ROAM behaviour "by eye" or trusting a short playtest window alone.
+- **Arena topology principle, worth keeping for any future arena or navigation work:** the nav
+  graph must explicitly represent every legal transition type (walk, jump, drop, ladder, wrap,
+  launcher/skill traversal where appropriate) as authored data. Bots should route through legal,
+  authored transitions; local collision/retry behaviour (unstick jumps, stall recovery) exists to
+  handle genuine physics uncertainty within a transition, not to compensate for a transition the
+  graph never described in the first place.
+
+**Explicitly deferred, not reopened at this closeout:** `B_Under`'s human-reachability/design
+question (0.09px beyond the jump ceiling — a Director-reserved M4 pickup site, not reclassified);
+the launcher remaining SKILL for normal bots; the other known human/skill-only traversal edges
+(`A_W_Bridge→Pier`, the two Vault far-edge jumps, `C_Seam→A_E_Bridge`, `C_W→B_Under`,
+`B_Seam↔B_W`); pre-existing non-load-bearing checker warnings (the cross-run determinism hash
+divergence; the launcher's 0-completions-in-360s note, which reflects its SKILL status working as
+designed, not a defect). None of these are arena, physics, or M3-1-scope problems — bot strategic
+intelligence, powers, combat, Relic seeking, learned/human-imitation bot intelligence, networking,
+and couch/controller multiplayer remain M3-2/M4/M9+ scope, untouched.
