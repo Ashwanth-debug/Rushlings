@@ -16,12 +16,17 @@ const ArenaGeometryScript := preload("res://scripts/arena_geometry.gd")
 const NavGraphScript := preload("res://scripts/nav_graph.gd")
 const MatchConfigScript := preload("res://scripts/match_config.gd")
 const TraversalRecorderScript := preload("res://scripts/traversal_recorder.gd")
+const PickupFieldScript := preload("res://scripts/pickup_field.gd")
 
 @onready var _slots_container: Node2D = $PlayerSlots
 @onready var _markers: Node2D = $Markers
 @onready var match_director: MatchDirector = $MatchDirector
 @onready var relic: Area2D = $Relic
 @onready var match_telemetry = $MatchTelemetry
+@onready var power_system: PowerSystem = $PowerSystem
+@onready var health_system: HealthSystem = $HealthSystem
+@onready var _pickups_container: Node2D = $Pickups
+@onready var _projectiles_container: Node2D = $Projectiles
 
 var match_config
 var geometry
@@ -29,6 +34,8 @@ var nav_graph
 var players: Array = []
 var brains: Array = []
 var round_index: int = 0
+var pickup_field
+var contact_lab_active: bool = false
 
 var labels_visible: bool = true
 var collision_enabled: bool = false
@@ -41,7 +48,11 @@ func _ready() -> void:
 	collision_enabled = match_config.player_collision_enabled
 	_spawn_slots()
 	_build_navigation()
+	_build_pickup_field()
 	_wire_bots()
+	power_system.configure(players, geometry, _projectiles_container, match_director)
+	health_system.configure(players, geometry, _spawn_anchor_positions(), power_system, _pickups_container, pickup_field)
+	health_system.player_respawned.connect(_on_player_respawned)
 	set_label_visibility(labels_visible)
 	set_player_collision(collision_enabled)
 	# M3-2 Step 2: nav_graph's vault edges must match MatchDirector's state
@@ -82,6 +93,38 @@ func _build_navigation() -> void:
 	geometry = ArenaGeometryScript.new(self, half_w, half_h)
 	nav_graph = NavGraphScript.new(geometry)
 
+## M4-1 STOP 1 - one PickupField built from whatever PowerPickup instances
+## exist under $Pickups in the scene (see scenes/arena_01/arena_01.tscn),
+## handed to every bot brain below. Built once per full reset, same lifetime
+## as geometry/nav_graph - the pickups themselves persist across rounds
+## (only their collected/respawning state changes), unlike bot brains.
+func _build_pickup_field() -> void:
+	pickup_field = PickupFieldScript.new()
+	for pickup in _pickups_container.get_children():
+		pickup_field.register(pickup)
+
+## M4-1 STOP 4 - the same four authored Spawn markers _spawn_slots()/
+## _full_reset() already use, read once as plain positions for
+## HealthSystem's respawn-anchor selection (docs/plans/M04_0_MATCH_SHAPE_DESIGN.md
+## S04.3: "reuse the four existing Spawn markers... never arbitrary
+## coordinates").
+func _spawn_anchor_positions() -> Array:
+	return [
+		_markers.get_node("Spawn1").global_position, _markers.get_node("Spawn2").global_position,
+		_markers.get_node("Spawn3").global_position, _markers.get_node("Spawn4").global_position,
+	]
+
+## HealthSystem treats every body identically (CLAUDE.md M4-1 STOP 3+4 S8) -
+## this is the one place that knows a respawned slot might be a bot, exactly
+## mirroring _on_match_state_changed()'s SETUP branch calling
+## brains[i].reset_goal(): a body teleported out from under a live BotBrain
+## needs its stale path/executor cleared (see BotBrain.handle_respawn()), or
+## nothing at all for P1's HumanController.
+func _on_player_respawned(slot_id: int) -> void:
+	var idx := slot_id - 1
+	if brains[idx] != null:
+		brains[idx].handle_respawn()
+
 func _wire_bots() -> void:
 	for i in range(match_config.slots.size()):
 		var cfg = match_config.slots[i]
@@ -95,6 +138,7 @@ func _wire_bots() -> void:
 			players[i], geometry, nav_graph, cfg.slot_id, _round_base_seed(),
 			other_bodies, Callable(self, "_on_bot_hard_recovery"), match_config.curiosity_player_prob, relic.global_position.x
 		)
+		brain.set_pickup_field(pickup_field)
 		brains[i] = brain
 		players[i].controller = BotControllerScript.new(brain)
 
@@ -174,8 +218,11 @@ func _full_reset(new_setup_duration: float = -1.0) -> void:
 				other_bodies, Callable(self, "_on_bot_hard_recovery"), match_config.curiosity_player_prob, relic.global_position.x
 			)
 			brain.set_mode(nav_mode)
+			brain.set_pickup_field(pickup_field)
 			brains[i] = brain
 			players[i].controller = BotControllerScript.new(brain)
+	power_system.reset()
+	health_system.reset()
 	match_director.reset_round(new_setup_duration)
 
 func _process(_delta: float) -> void:
@@ -232,6 +279,25 @@ func _process(_delta: float) -> void:
 	if Input.is_action_just_pressed("debug_setup_25"):
 		match_director.reset_round(25.0)
 		print("Arena01: setup_duration = 25.0, round reset")
+	if Input.is_action_just_pressed("debug_damage_p1"):
+		# M4-1 STOP 3+4 debug key (CLAUDE.md S10): the real pipeline, not a
+		# direct health mutation - goes through the exact same apply_damage()
+		# a Rocket hit uses, so it exercises defeat/spill/respawn/protection
+		# identically for deterministic testing.
+		health_system.apply_damage(players[0])
+		print("Arena01: debug damage applied to P1 (health=%d/%d)" % [players[0].health, players[0].max_health])
+	if Input.is_action_just_pressed("debug_cycle_freeze_duration"):
+		power_system.cycle_freeze_duration()
+	if Input.is_action_just_pressed("debug_contact_lab"):
+		contact_lab_active = not contact_lab_active
+		power_system.reset()
+		health_system.reset()
+		if contact_lab_active:
+			match_director.enter_contact_lab()
+			print("Arena01: M4-1 Contact Lab ON - Relic sealed and match clock frozen, roam/pickups/powers indefinitely")
+		else:
+			match_director.exit_contact_lab()
+			print("Arena01: M4-1 Contact Lab OFF - back to the accepted M3 match")
 	if nav_mode == BotBrainScript.Mode.NAV_STRESS_TEST:
 		_update_stress_labels()
 

@@ -2,9 +2,13 @@ class_name BotBrain
 extends RefCounted
 
 # ROAM + RECOVER only, per docs/plans/M03_CORE_GAME_LOOP.md §7.4 - "do not
-# build a general utility system for two states." M3-2 adds SEEK_RELIC at
-# the same target-selection seam; M4 adds SEEK_PICKUP/CHASE/AVOID/USE_POWER
-# there too. None of that exists here.
+# build a general utility system for two states." M3-2 added SEEK_RELIC at
+# the same target-selection seam. M4-1 STOP 1+2 adds SEEK_PICKUP (an
+# opportunistic detour inside plain ROAM curiosity, not a new Goal or State -
+# see _pick_pickup_target()/_pickup_x_here()) and USE_POWER (a periodic
+# range check independent of ROAM/RECOVER - see _update_use_power()). Both
+# are deliberately minimal: no health-aware reasoning, no combat planner, no
+# personalities (docs/GAME_DESIGN.md §11/§13).
 
 enum State { ROAM, RECOVER }
 
@@ -112,7 +116,15 @@ var curiosity_player_prob: float
 ## gets a sane value.
 var relic_x: float = 1000.0
 
+## M4-1 STOP 1 - set via set_pickup_field() (a setter, not a constructor
+## param - see pickup_field.gd's own header for why), never in _init().
+## Stays null for every existing test rig that never calls the setter
+## (tools/m3_check.gd, tools/nav_soak_test.gd, tools/door_arrival_check.gd),
+## which is exactly what gates every pickup-seeking branch below off for them.
+var pickup_field = null
+
 var rng := RandomNumberGenerator.new()
+var pickup_rng := RandomNumberGenerator.new()
 var state: State = State.ROAM
 var mode: Mode = Mode.NORMAL_ROAM
 var goal: Goal = Goal.ROAM
@@ -187,6 +199,19 @@ func _init(p_body: CharacterBody2D, p_geometry: ArenaGeometry, p_graph: NavGraph
 	relic_x = p_relic_x
 
 	rng.seed = match_seed + slot_index
+	# M4-1 STOP 1: a separate stream, not `rng`, for SEEK_PICKUP's own roll
+	# (_pick_pickup_target()) - every pre-existing ROAM/NAV_STRESS decision
+	# (region pick, node pick, curiosity-follow) is drawn from `rng` in a
+	# fixed order that tools/m3_check.gd's determinism and long-run tests
+	# depend on. Consuming even one extra `rng.randf()` per decision cycle
+	# shifts every later draw in that sequence, which was confirmed to
+	# occasionally route a bot into an already-known-flaky SKILL-edge
+	# neighbourhood near the vault seal (the same geometry the 4 acknowledged
+	# m3_check.gd findings already document) purely from the changed RNG
+	# sequence, not from anything SEEK_PICKUP itself targets. A second,
+	# independently-seeded generator keeps SEEK_PICKUP's own randomness from
+	# perturbing any pre-existing, already-tuned bot decision at all.
+	pickup_rng.seed = match_seed + slot_index + 97
 	var row: int = slot_index % DECISION_INTERVALS.size()
 	decision_interval = DECISION_INTERVALS[row]
 	reaction_delay = REACTION_DELAYS[row]
@@ -331,6 +356,74 @@ func consume_jump_intent() -> bool:
 	_pending_jump = false
 	return j
 
+## M4-1 STOP 1 - the only way anything outside this file learns about the
+## pickup field. Deliberately a setter, not a constructor param - see
+## pickup_field's own declaration above.
+func set_pickup_field(field) -> void:
+	pickup_field = field
+
+## M4-1 STOP 2 - USE_POWER (CLAUDE.md M4-1 S10): "if carrying a power and
+## another player is within a simple valid range/forward condition, [it] may
+## be used." Deliberately no health-aware or tactical reasoning of any kind
+## (docs/GAME_DESIGN.md S11/S13's explicit no-low-health-behaviour rule
+## applies to every bot decision, not just this one) - just "is anyone
+## close enough to matter." PowerSystem's own per-power validity rule
+## (scripts/power_system.gd) is the real gate on whether anything happens;
+## this only decides whether the bot bothers to try.
+const USE_POWER_CHECK_INTERVAL := 0.5
+const USE_POWER_RANGE := 300.0
+
+var _pending_power_use: bool = false
+var _use_power_clock: float = 0.0
+
+func consume_power_intent() -> bool:
+	var p := _pending_power_use
+	_pending_power_use = false
+	return p
+
+func _update_use_power(delta: float) -> void:
+	_use_power_clock -= delta
+	if _use_power_clock > 0.0:
+		return
+	_use_power_clock = USE_POWER_CHECK_INTERVAL
+	if not body.has_method("has_power") or not body.has_power():
+		return
+	if _find_use_power_target() != null:
+		_pending_power_use = true
+
+func _find_use_power_target() -> CharacterBody2D:
+	for other in other_bodies:
+		if other == null or not is_instance_valid(other):
+			continue
+		# M4-1 STOP 3+4: a Defeated body is meant to be "not there" for the
+		# rest of the arena (see player.gd's set_defeated()) - not targeting
+		# one isn't tactical/health-aware reasoning, it's just not wasting an
+		# attempt on someone who is invisible and cannot be affected.
+		if "is_defeated" in other and other.is_defeated:
+			continue
+		var dx: float = geometry.shortest_diff(other.global_position.x, body.global_position.x)
+		var dy: float = other.global_position.y - body.global_position.y
+		if Vector2(dx, dy).length() <= USE_POWER_RANGE:
+			return other
+	return null
+
+## M4-1 STOP 3+4 - called by arena_01.gd right after a bot's body is
+## reset_to()'d onto a fresh respawn anchor (scripts/health_system.gd). Same
+## shape as reset_goal()'s own path/executor/target clearing: an EdgeExecutor
+## built against the pre-respawn position is meaningless after a teleport,
+## exactly the "stale navigation" class of bug reset_goal() already exists to
+## prevent for the OPEN goal-switch case. current_node self-corrects within
+## one tick via _update_localization() and needs no help here; goal is left
+## alone deliberately - a bot mid-SEEK_RELIC when defeated should still want
+## the Relic after respawning.
+func handle_respawn() -> void:
+	target_node = ""
+	path = []
+	path_index = 0
+	executor = null
+	_invalid_platform = ""
+	decision_clock = min(decision_clock, 0.1)
+
 func tick(delta: float) -> void:
 	_clock += delta
 	horizontal_intent = 0.0
@@ -341,6 +434,7 @@ func tick(delta: float) -> void:
 		State.RECOVER:
 			_tick_recover(delta)
 	_update_stall_ladder(delta)
+	_update_use_power(delta)
 
 # --- Diagnostics (Director feedback: instrument bot state so automated
 # tests can identify exactly which logical-idle hole, if any, a bot is in) --
@@ -396,8 +490,11 @@ func _tick_roam(delta: float) -> void:
 	# Relic instead of collecting it - a pure walk toward the Relic's actual
 	# (wrap-aware) x, holding once close enough for the Relic's own Area2D
 	# overlap to do the rest.
+	var pickup_here := _pickup_x_here()
 	if goal == Goal.SEEK_RELIC and current_node == "VaultFloor":
 		_final_approach_relic()
+	elif not is_nan(pickup_here):
+		_final_approach_x(pickup_here)
 	else:
 		_intra_node_wander()
 
@@ -631,11 +728,32 @@ const RELIC_ARRIVAL_TOL := 8.0
 ## jump (the 84px alcove is too low), holding once close enough that the
 ## Relic's own Area2D overlap resolves the actual collection.
 func _final_approach_relic() -> void:
-	var diff: float = geometry.shortest_diff(relic_x, body.global_position.x)
+	_final_approach_x(relic_x)
+
+## M4-1 STOP 1 - generalised for pickups: the exact same "walk to this real
+## x and hold, let the target's own Area2D resolve collection" shape
+## _final_approach_relic() already used, since a pickup floating above a
+## small platform has the identical "random intra-node wander would drift
+## past it" problem the Relic does.
+func _final_approach_x(target_x: float) -> void:
+	var diff: float = geometry.shortest_diff(target_x, body.global_position.x)
 	if abs(diff) < RELIC_ARRIVAL_TOL:
 		horizontal_intent = 0.0
 	else:
 		horizontal_intent = 1.0 if diff > 0.0 else -1.0
+
+## The available pickup's real x if this bot is empty-handed and one exists
+## on the node it is currently standing on, else NAN. Deliberately opportunistic
+## rather than tied to a specific "I chose this pickup as my goal" flag - a
+## bot that arrives at a pickup's platform for any reason (curiosity,
+## SEEK_PICKUP, recovery) collects it if it can use it, exactly like a human
+## walking past one would.
+func _pickup_x_here() -> float:
+	if pickup_field == null or current_node == "":
+		return NAN
+	if not body.has_method("has_power") or body.has_power():
+		return NAN
+	return pickup_field.x_for_node(current_node)
 
 ## The next node in this bot's explicit destination sequence, or "" once the
 ## whole sequence has looped back around past its own length once - a run
@@ -682,7 +800,34 @@ func _weighted_cost(edge: Dictionary) -> float:
 # existing graph nodes. The Relic/vault is never offered as a destination
 # (Problem 3) - see ArenaRegions.roamable_nodes_in.
 
+## M4-1 STOP 1 - SEEK_PICKUP (CLAUDE.md M4-1 S10): "if empty and an
+## accessible pickup exists, occasionally choose a pickup as a goal."
+## PICKUP_SEEK_PROB is deliberately well under 1.0 and this is only ever
+## consulted from plain ROAM curiosity (never from SEEK_RELIC's target
+## selection, which always returns "VaultFloor" before this function is
+## reached) - a bot still spends most of its ROAM cycles on ordinary
+## curiosity/environmental picks, exactly the "preserve enough roaming"
+## requirement.
+const PICKUP_SEEK_PROB := 0.35
+
+func _pick_pickup_target() -> String:
+	if pickup_field == null or body.has_method("has_power") and body.has_power():
+		return ""
+	if pickup_rng.randf() >= PICKUP_SEEK_PROB:
+		return ""
+	var reachable: Dictionary = graph.reliable_reachable_from(current_node) if current_node != "" else {}
+	var candidates: Array = []
+	for n in pickup_field.available_nodes():
+		if n != current_node and reachable.get(n, false):
+			candidates.append(n)
+	if candidates.is_empty():
+		return ""
+	return candidates[pickup_rng.randi_range(0, candidates.size() - 1)]
+
 func _pick_interest_target() -> String:
+	var pickup_target := _pick_pickup_target()
+	if pickup_target != "":
+		return pickup_target
 	if not other_bodies.is_empty() and rng.randf() < curiosity_player_prob:
 		var idx := rng.randi_range(0, other_bodies.size() - 1)
 		var other: CharacterBody2D = other_bodies[idx]

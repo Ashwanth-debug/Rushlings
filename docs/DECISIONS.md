@@ -2054,3 +2054,173 @@ decided from human evidence rather than assumption.
 6. **M4 is seven stages.** Treating it as one milestone will produce schedule surprise.
 
 ---
+
+## 2026-09-12 — M4-1 Contact: COMPLETE / ACCEPTED
+
+**Status: ACCEPTED** by the Game Director after human playtesting confirmed all five STOP points
+from `docs/plans/M04_0_MATCH_SHAPE_DESIGN.md` §08. Implementation: `scripts/health_system.gd`,
+`scripts/power_system.gd`, `scripts/power_type.gd`, `scripts/power_pickup.gd`,
+`scripts/pickup_field.gd`, `scripts/rocket_projectile.gd`, plus the M4-1 additions to `player.gd`
+(health/defeat/protection/power-carry state and its own presentation), `arena_01.gd` (wiring +
+five debug keys), `bot_brain.gd` (`SEEK_PICKUP`/`USE_POWER` at the existing `_decide_next()` seam),
+and the three controller scripts (`power_pressed()`). Permanent regression tool:
+`tools/m4_1_check.gd`.
+
+**Human validation confirmed:** touch-to-collect pickup/carry-one/replacement reads correctly;
+one-use consumption (use → empty → collect again) reads correctly; Push, Rocket and Freeze all work
+and feel meaningfully different from each other; Push feels useful; 3-pip health is readable at
+normal full-arena scale; defeat works; the carried power spills correctly on defeat; a spilled power
+can be collected like any other pickup; unlimited respawn works; the authored furthest-from-nearest-
+living-opponent respawn selection works; spawn protection works as a prototype; and a 1.5s
+defeat→respawn window feels correct (revised down from an initial 3.0s prototype value, which the
+Game Director found "noticeably too slow").
+
+**Accepted/prototype M4-1 values, not production balance:**
+
+| Value | Setting |
+|---|---|
+| Health | 3 pips |
+| Successful Push | 1 pip + displacement |
+| Successful Rocket hit | 1 pip |
+| Successful Freeze | 1 pip + freeze |
+| Freeze duration | 1.0s (tunable via `debug_cycle_freeze_duration`, cycles 0.75/1.0/1.5/2.0s) |
+| Defeat duration | 1.5s |
+| Spawn protection | 0.8s |
+| Pickup respawn | 6.0s |
+| Carry / use | carry-one / one-use |
+| Player↔player collision | OFF (unchanged) |
+
+Freeze duration remains explicitly tunable; none of these are production values.
+
+**Regression verification (exact working tree, this close-out):** `tools/arena_check.gd` — PASS,
+exit 0, 0 failures, the two pre-existing acknowledged exceptions (`R7` `B_Under`, the west gateway
+shaft/`VaultSealW` overlap) unchanged. `tools/m4_1_check.gd` (new) — PASS, 0 failures across all
+deterministic sections (pickup/replacement, consumption, Push, Rocket, Freeze, bot mechanics,
+health, defeat, respawn, spawn protection, repeated cycles, defeat-by-each-power, mixed combat
+sequences, spawn protection vs. each power) plus a 90s organic-play diagnostic. No new runtime
+errors were introduced.
+
+`tools/m3_check.gd` — re-run in full (including NAV STRESS mode and the 20-round fairness batch)
+twice on this exact tree. The four previously-acknowledged edge-sampling findings
+(`C_Seam→A_E_Bridge`, `A_W_Bridge→Pier`, `VaultFloor→VaultEast`, `VaultEast→A_E`) reproduced
+identically (same worst-case start positions and timings) both times — the underlying M3 mechanics
+are unchanged. **New, acknowledged finding, discovered by this close-out's own verification, not
+caused by M4-1 or M4-2:** both full runs also showed slot 3 failing "reaches explicit destinations"
+and four `destination reliability` categories in `_test_nav_stress_destinations()` (only 1 arrival
+in 90s), and the second run's `_test_determinism()` additionally logged its own pre-existing WARN
+branch — two rigs built from the identical seed diverged after 300 ticks (`hash_a` vs `hash_b`),
+a class of drift the test's own source already anticipates and downgrades to WARN rather than FAIL.
+**This is not an M4-1 or M4-2 regression**, established by: (1) an isolated re-run of
+`_test_nav_stress_destinations()` alone, immediately after the same failing full run, passed
+cleanly with 0 failures — the failure does not reproduce outside a long, cumulative single-process
+run; (2) M4-2's danger zones are provably inert during `m3_check.gd` (armed=false by construction,
+`_physics_process` returns immediately, and `_load_rig()` never arms them); (3) `bot_brain.gd`'s
+`pickup_field` stays null in this rig, so `_pick_pickup_target()` short-circuits before ever
+consuming `pickup_rng`, leaving the pre-existing `rng` decision sequence provably byte-identical to
+before M4-1. The evidence points to a rare, load/timing-sensitive engine-level float/physics
+determinism artifact surfacing only after ~40 minutes of cumulative in-process simulation, not a
+logic defect in bot decision-making. **Recorded here rather than silently patched or root-caused
+under this session's time budget**, per the project's standing rule for `m3_check.gd` findings — a
+future session should treat it as a fifth acknowledged finding unless further evidence promotes it
+to something worth fixing.
+
+**Why `arena_check.gd`/`door_arrival_check.gd` now disable `PowerSystem`/`HealthSystem` during their
+own runs (both tools also modified this session, though not gameplay code):** both checkers exist
+to prove geometry/traversal determinism for one designated test subject. Once `PowerSystem` exists,
+a background bot can legitimately Push or Freeze that subject mid-route on any given run — real
+M4-1 behaviour, not a bug, but it makes the checker's own route non-deterministic, which is a
+defect in the *checker*, not the game. Both systems are set `physics_process(false)` for the
+duration of those two tools only; player-vs-player interference itself is exercised separately and
+correctly in `tools/m4_1_check.gd`.
+
+---
+
+## 2026-09-12 — Damage-model amendment: Push and Freeze now deal damage too, not just Rocket
+
+**Status: APPROVED as a prototype amendment to M4-0, based on M4-1 human playtesting.**
+
+**The finding.** M4-0 approved Push = 0 damage and Freeze = 0 damage, reasoning that control powers
+should be pure displacement/denial while only Rocket (a dedicated damage power) reduces health —
+see `docs/plans/M04_0_MATCH_SHAPE_DESIGN.md` §05.6 and the 2026-09-12 M4-0 entries above. Playing
+the real STOP 2/3/4 build surfaced a problem that pure argument hadn't: with Rocket as the *only*
+damage source, and three one-use, carry-one powers competing for the same scarce pickups, reducing
+another player's 3 pips took too long. Push and Freeze were fully functional, felt good to use, and
+contributed nothing to the health/defeat loop, despite costing exactly the same pickup and the same
+one-use economy as Rocket.
+
+**The amendment.** All three current hostile powers — Push, Rocket, Freeze — now deal exactly 1 pip
+of damage on a successful hit, routed through the same single pipeline
+(`PowerSystem.power_hit` → `HealthSystem.apply_damage()`) regardless of which power caused it, so
+there is still only one damage implementation in the codebase. **Strategic identity is preserved
+through the non-damage effect, not through damage:**
+
+| Power | Damage | Non-damage identity |
+|---|---|---|
+| Push | 1 | Displacement — moves the target, potentially into a hazard or off a route (M4-2 relevance unchanged) |
+| Rocket | 1 | Range — the only power effective at distance |
+| Freeze | 1 | Temporary control — the only power that denies input |
+
+**This is a prototype finding validated by human playtesting, not a re-litigation of the M4-0
+control/damage taxonomy.** The taxonomy itself (`docs/GAME_DESIGN.md` §10's Control/Damage/Denial/
+Defense/Mobility/Summon categories) is unchanged — Push is still categorically a Control power and
+Freeze still categorically a Control power. What changed is a single specific rule inside M4-0's
+design (§04.2's damage-source table), not the category system built on top of it.
+
+**Explicitly do not generalize this into "all future powers must deal damage."** Shield (M4-5) is a
+Defense power by definition and must not deal damage to anything. Teleport and Mobility powers
+(M4-5) are not obligated to deal damage either. This amendment is a finding about *this specific
+three-power set*, made because M4-1 had no other damage source yet (M4-2's hazards are the
+alternative lever, not yet available when this was tested) — it is not a new rule that every future
+power needs a damage clause.
+
+**Evidence, not just argument:** a 90s organic-play diagnostic (`tools/m4_1_check.gd`, 3 bots + 1
+idle P1, current pickup density) recorded, with the damage-model amendment in place, 7 total damage
+pips (Push=2, Rocket=0, Freeze=5) and exactly 1 organic defeat in that window. Even with all three
+powers now dealing damage, organic defeats remain rare at M4-1's pickup density with no hazards —
+confirming this was a real gap, not a solved one, and that M4-2's hazards (not further M4-1 power
+tuning) are the intended next lever, per the aspiration recorded 2026-09-12 above.
+
+**Documents updated by this amendment:** `docs/GAME_DESIGN.md` §10 (power taxonomy table's Damage?
+column note) and §11 (the damage-source table); `docs/plans/M04_0_MATCH_SHAPE_DESIGN.md` (status
+banner only — the original §04.2/§05.6 text is preserved as the historical record of what M4-0
+approved, per this project's standing rule against deleting superseded text); `CLAUDE.md`'s M4
+guardrails.
+
+---
+
+## 2026-09-12 — M4-1 health visual treatment selected at STOP 3: character-integrated pips + flash
+
+**Status: APPROVED**, resolving the M4-0 open question at `docs/plans/M04_0_MATCH_SHAPE_DESIGN.md`
+§04.1.
+
+**Decision:** health is shown as three small pips positioned above each character (`Pip1`/`Pip2`/
+`Pip3` in `scenes/player/player.tscn`), lit when alive and dimmed when lost — plus a brief flash/
+tint on the body itself when a hit lands (`player.gd`'s `flash_push()`/`flash_hit()`/
+`set_frozen_visual()`), so a hit reads clearly at full-arena scale without a HUD. **Not** a ring,
+outline, or segmented bar — the simplest of the recorded candidates, and read clearly in playtesting
+at normal full-arena gameplay scale without a percentage bar. No production art was applied; this is
+still a greybox treatment.
+
+---
+
+## 2026-09-12 — M4-1 close-out: regression baseline confirmed, M4-2 is next
+
+**Status: RECORDED.** Closes the M4-1 stage per `docs/ROADMAP.md`'s seven-stage M4 phase.
+
+**Inherited and unchanged:** all M1 movement, M2 Arena 01 geometry, M3 navigation (the nav graph,
+`Floor→C_M`, the RELIABLE/SKILL policy, vault traversal, ladders, wrapping), the accepted M3-2 match
+loop (`SETUP → UNLOCKING → OPEN → SEEK_RELIC → COLLECTION → RESULTS → REMATCH` — still what a normal
+match runs; M4-1's Contact Lab is a separate dev-only mode that freezes the SETUP clock and leaves
+the Relic sealed, per `match_director.gd`'s `enter_contact_lab()`/`exit_contact_lab()`), 1.0× tempo,
+player↔player collision OFF, and the four previously-acknowledged `arena_check.gd`/`m3_check.gd`
+findings.
+
+**New this stage:** the entire M4-1 power/health/defeat/respawn module described above, plus a
+permanent `tools/m4_1_check.gd` regression tool that must pass alongside `arena_check.gd` and
+`m3_check.gd` before any future M4 change.
+
+**M4-2 — The Arena Bites is next.** Per `docs/ROADMAP.md`, its one question is whether making Arena
+01 itself dangerous improves combat and makes positioning/Push more strategically valuable. Nothing
+in M4-2 is implemented as of this close-out.
+
+---

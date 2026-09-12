@@ -38,3 +38,8 @@ func jump_pressed(in_traversal_zone: bool) -> bool:
 	# Up doubles as jump, but only away from a ladder - inside a traversal
 	# zone it means climb up instead. Mirrors the original _get_jump_intent().
 	return not in_traversal_zone and Input.is_action_just_pressed(_action("vertical_intent_up"))
+
+func power_pressed() -> bool:
+	if frozen:
+		return false
+	return Input.is_action_just_pressed(_action("power_action"))

@@ -84,6 +84,24 @@ func _load_rig() -> Dictionary:
 	root.add_child(arena)
 	await process_frame
 	await process_frame
+	# M4-1 STOP 1+2: disabled here, once, for every test in this file rather
+	# than per call site (see tools/arena_check.gd's identical fix for the
+	# failure shape this prevents). Every test below assumes navigation/match-
+	# loop determinism that predates powers entirely - a bot free to Push or
+	# Freeze another bot mid-edge (input-lock during Freeze reads exactly like
+	# a stall to an EdgeExecutor) turned "destination reliability" and
+	# "reaches explicit destinations" flaky, and a Push could physically shove
+	# a bot into the sealed vault interior that ROAM's own pathing would never
+	# route it through, breaking "no bot enters the vault interior while
+	# sealed". Player-vs-player interference itself is tested separately in
+	# tools/m4_1_check.gd.
+	arena.get_node("PowerSystem").set_physics_process(false)
+	# M4-1 STOP 3+4: HealthSystem can only act on a real power_hit signal
+	# (a landed Rocket), which the line above already makes impossible - a
+	# defeated/invisible/uncollectable bot mid-test would be exactly the
+	# same class of determinism break as the Push/Freeze case documented
+	# above, so this is disabled here too, defence-in-depth.
+	arena.get_node("HealthSystem").set_physics_process(false)
 	return {"arena": arena, "geometry": arena.geometry, "graph": arena.nav_graph}
 
 func _unload_rig(arena: Node2D) -> void:

@@ -12,6 +12,9 @@
 [ext_resource type="Script" path="res://scripts/match_hud.gd" id="10"]
 [ext_resource type="Script" path="res://scripts/relic.gd" id="11"]
 [ext_resource type="Script" path="res://scripts/match_telemetry.gd" id="12"]
+[ext_resource type="Script" path="res://scripts/power_system.gd" id="13"]
+[ext_resource type="PackedScene" path="res://scenes/power/power_pickup.tscn" id="14"]
+[ext_resource type="Script" path="res://scripts/health_system.gd" id="15"]
 
 [sub_resource type="RectangleShape2D" id="FloorShape"]
 size = Vector2(2120, 120)
@@ -466,6 +469,46 @@ shape = SubResource("RelicShape")
 
 [node name="MatchTelemetry" type="Node" parent="." unique_id=3050112250]
 script = ExtResource("12")
+
+[node name="PowerSystem" type="Node" parent="." unique_id=3050112260]
+script = ExtResource("13")
+
+[node name="HealthSystem" type="Node" parent="." unique_id=3050112269]
+script = ExtResource("15")
+
+[node name="Projectiles" type="Node2D" parent="." unique_id=3050112261]
+
+[node name="Pickups" type="Node2D" parent="." unique_id=3050112262]
+
+[node name="Pickup_Floor" parent="Pickups" unique_id=3050112263 instance=ExtResource("14")]
+position = Vector2(960, 932)
+power_type = 1
+nav_node = "Floor"
+
+[node name="Pickup_CM" parent="Pickups" unique_id=3050112264 instance=ExtResource("14")]
+position = Vector2(1260, 792)
+power_type = 3
+nav_node = "C_M"
+
+[node name="Pickup_BSeam" parent="Pickups" unique_id=3050112265 instance=ExtResource("14")]
+position = Vector2(1850, 532)
+power_type = 2
+nav_node = "B_Seam"
+
+[node name="Pickup_Pier" parent="Pickups" unique_id=3050112266 instance=ExtResource("14")]
+position = Vector2(780, 172)
+power_type = 2
+nav_node = "Pier"
+
+[node name="Pickup_AW" parent="Pickups" unique_id=3050112267 instance=ExtResource("14")]
+position = Vector2(590, 272)
+power_type = 1
+nav_node = "A_W"
+
+[node name="Pickup_AE" parent="Pickups" unique_id=3050112268 instance=ExtResource("14")]
+position = Vector2(1343, 272)
+power_type = 3
+nav_node = "A_E"
 
 [node name="RelicGate" type="Node2D" parent="." unique_id=1469229969]
 script = ExtResource("8")

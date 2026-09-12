@@ -25,3 +25,8 @@ func jump_pressed(_in_traversal_zone: bool) -> bool:
 	if frozen:
 		return false
 	return brain.consume_jump_intent()
+
+func power_pressed() -> bool:
+	if frozen:
+		return false
+	return brain.consume_power_intent()

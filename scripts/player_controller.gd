@@ -35,3 +35,11 @@ func vertical() -> float:
 ## player.gd owns that flag; the controller doesn't.
 func jump_pressed(_in_traversal_zone: bool) -> bool:
 	return false
+
+## M4-1 STOP 1+2 - the one contextual power-action input, read by
+## PowerSystem (scripts/power_system.gd) exactly like jump_pressed() is read
+## by player.gd: edge-triggered, true for at most one physics frame per
+## activation. Whichever single power is currently carried is what fires -
+## there is no separate button per power (CLAUDE.md M4-1 S04).
+func power_pressed() -> bool:
+	return false

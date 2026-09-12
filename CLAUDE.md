@@ -13,7 +13,8 @@ At the start of every implementation session:
    as superseded; do not follow them for M4 work.
 3. Read `docs/ROADMAP.md` — the M4 section is a **phase of seven stages**, not one milestone.
 4. Read `docs/plans/M04_0_MATCH_SHAPE_DESIGN.md` — **the authority for the whole M4 phase.**
-5. Read `docs/DECISIONS.md`, at minimum the 2026-09-12 M4-0 entries at the end of the file.
+5. Read `docs/DECISIONS.md`, at minimum the 2026-09-12 M4-0 and M4-1 close-out entries at the end of
+   the file.
 6. Inspect the current Git status and relevant project files.
 7. Identify the requested milestone and work only inside that milestone unless a prerequisite fix is required.
 
@@ -59,15 +60,37 @@ Milestone 3-1 — Four-Player Foundation: COMPLETE / ACCEPTED (2026-09-09). Mile
 - **What the game currently IMPLEMENTS is the M3 loop** — `SETUP → UNLOCKING → OPEN → SEEK_RELIC → COLLECTION → RESULTS → REMATCH`, with first-touch-wins. **That is no longer the intended final match.** The approved M4 direction (`docs/plans/M04_0_MATCH_SHAPE_DESIGN.md`, approved 2026-09-12) replaces it with an escalating `BUILD → ESCALATE → CLIMAX` match ending in carry-to-a-locked-extraction. Approved, designed, **not implemented** — see the Milestone 4 section below.
 
 ## Milestone 4 — Powers, Match Shape & Bot Intelligence
-**M4-0 — Match Shape Design: COMPLETE / APPROVED (2026-09-12). M4-1 onward: NOT STARTED.**
-- **Authority: `docs/plans/M04_0_MATCH_SHAPE_DESIGN.md`.** M4 is a phase of seven stages, not one milestone: M4-0 design (done) · M4-1 Contact · M4-2 The Arena Bites · M4-3 The Climax · M4-4 The Long Match · GATE progression judgment · M4-5 Broader Power Set · M4-6 Economy (conditional).
+**M4-0 — Match Shape Design: COMPLETE / APPROVED (2026-09-12).**
+**M4-1 — Contact: COMPLETE / ACCEPTED (2026-09-12).** Human validation confirmed: pickup/carry-one/
+replacement, one-use consumption, Push (feels useful), Rocket, Freeze all working; all three hostile
+powers remove exactly 1 health pip on a successful hit while keeping distinct identities (Push =
+damage + displacement, Rocket = damage + range, Freeze = damage + temporary control); 3-pip health is
+readable; defeat, power-spill and spill-collection work; unlimited respawn, authored dynamic respawn
+selection and spawn protection (as a prototype) all work; 1.5s defeat→respawn feels correct. Current
+accepted/prototype values: health 3 pips · Push/Rocket/Freeze each 1 pip on hit · Freeze duration
+1.0s (tunable) · defeat duration 1.5s · spawn protection 0.8s · pickup respawn 6.0s · carry-one /
+one-use · player↔player collision OFF. These are prototype baselines, not production balance.
+**Damage-model amendment (2026-09-12):** the M4-0 assumption that Push and Freeze deal zero direct
+damage is superseded for the current prototype — discovered and validated during M4-1. **Do not
+generalize this into "all future powers must deal damage"**; it is a finding about this specific
+power set. See `docs/DECISIONS.md` (2026-09-12, M4-1 close-out entries) for the full record,
+regression results and STOP-by-STOP findings.
+**M4-2 — The Arena Bites: NEXT.** The one question: does making Arena 01 itself dangerous improve
+combat and make positioning/Push more strategically valuable? See
+`docs/plans/M04_0_MATCH_SHAPE_DESIGN.md` §05.5/§07 for scope. Mechanical prototyping, automated
+tests and headless soaks may proceed without stopping for approval; **accepting danger zones,
+tuning their timings permanently, redesigning Arena 01, or starting M4-3 are Game Director
+decisions, not automatic outcomes of a passing test suite.**
+- **Authority: `docs/plans/M04_0_MATCH_SHAPE_DESIGN.md`.** M4 is a phase of seven stages, not one milestone: M4-0 design (done) · M4-1 Contact (done) · M4-2 The Arena Bites (next) · M4-3 The Climax · M4-4 The Long Match · GATE progression judgment · M4-5 Broader Power Set · M4-6 Economy (conditional).
 - **The approved match:** `BUILD → ESCALATE → CLIMAX`. Grab the Relic, then carry it to an extraction that is selected **once per round** at first pickup (five authored region anchors, maximum region-distance from the first carrier, deterministic tie-break) and then **locked for the round** — it never recalculates on carrier defeat, Relic drop, ownership change or respawn.
-- **Powers are one-use / carry-one.** M4-1's approved set is **Push (control, 0 damage) + Rocket (direct damage) + Freeze (denial, 0 damage)**. Mine → M4-3, Shield/Teleport/Mobility → M4-5.
-- **Health is three coarse pips** (`Healthy → Hurt → Critical → Defeated`), never a percentage bar; the visual treatment is chosen at M4-1 STOP 3, not before. **Health never prescribes behaviour** — no low-health retreat, for humans or bots.
+- **Powers are one-use / carry-one.** M4-1's approved set is **Push + Rocket + Freeze**, all three
+  now dealing 1 pip damage on a successful hit (damage-model amendment above) while keeping distinct
+  identities via displacement/range/control. Mine → M4-3, Shield/Teleport/Mobility → M4-5.
+- **Health is three coarse pips** (`Healthy → Hurt → Critical → Defeated`), never a percentage bar; the visual treatment is character-integrated (body flash/tint), accepted at M4-1 STOP 3. **Health never prescribes behaviour** — no low-health retreat, for humans or bots.
 - **Unlimited respawns with cost, not limited lives.** On defeat the carried power spills as a contestable pickup; a defeated carrier also drops the Relic.
 - **"You feed them to the arena" is an aspiration, not a proven rule** — M4-2 must establish how important environmental damage actually becomes. Do not encode "the arena is the primary damage source."
-- **Open by design, do not default:** all timings · timeout resolution (a hard-cap/sudden-death rule was proposed and explicitly withdrawn) · the health visual treatment · the value of environmental damage · whether stat progression is ever needed.
-- **Nothing in M4 is implemented.** No pickups, powers, health, defeat, respawn, hazards, carry or extraction code exists.
+- **Open by design, do not default:** all timings · timeout resolution (a hard-cap/sudden-death rule was proposed and explicitly withdrawn) · the value of environmental damage · whether stat progression is ever needed · whether the spawn protection window becomes permanent.
+- **M4-1 is implemented and accepted.** M4-2 (danger zones) is next; M4-3 onward (Relic carry/extraction, Mine, the long match) remain unimplemented.
 
 
 ## Core Product Principle
@@ -122,11 +145,16 @@ These are intentionally hard constraints unless explicitly revisited:
 - Players collect a power by touching the pickup.
 - **M4-1's approved power set is Push + Rocket + Freeze.** Mine → M4-3; Shield, Teleport and
   Mobility → M4-5. The old "Freeze, Push, Teleport, Shield" list is superseded as an *ordering*.
-- **Control powers deal no damage; damage powers do.** Push = 0, Freeze = 0, Rocket = 1. Falling = 0
-  (fall damage would retune closed M1 movement). Every damage instance is exactly 1 pip.
+- **Damage-model amendment (M4-1, 2026-09-12): all three current hostile powers deal 1 pip on a
+  successful hit** — Push = 1 + displacement, Rocket = 1 + range, Freeze = 1 + temporary control.
+  This supersedes the M4-0 assumption that Push/Freeze deal zero direct damage; their strategic
+  identity still comes from the non-damage effect, not from damage alone. Falling = 0 (fall damage
+  would retune closed M1 movement). Every damage instance is exactly 1 pip. **Do not generalize this
+  into "every future power must deal damage"** — it is a finding about this power set, reversible if
+  a future power's design calls for pure control.
 - **Health exists as of the M4 direction: three coarse states** — `Healthy → Hurt → Critical →
-  Defeated`. **Never a percentage bar.** The visual treatment is deliberately unchosen and is
-  selected by M4-1 STOP 3.
+  Defeated`. **Never a percentage bar.** The visual treatment (character-integrated flash/tint) was
+  accepted at M4-1 STOP 3.
 - **Health never prescribes behaviour.** No "low health → retreat/hide" rule, for humans or bots. The
   only state that changes what a player can do is `Defeated` at zero. **Never add automatic
   low-health retreat to bots.**
@@ -268,27 +296,27 @@ It is done when:
 ## Immediate Next Milestone
 **Milestone 3 — Core Game Loop: COMPLETE / ACCEPTED.**
 **M4-0 — Match Shape Design: COMPLETE / APPROVED (2026-09-12).**
-**M4-1 — Contact: PLANNED / NOT STARTED.** No M4 gameplay code, scene, tool or project setting
-exists.
+**M4-1 — Contact: COMPLETE / ACCEPTED (2026-09-12).** Full record in `docs/DECISIONS.md`.
+**M4-2 — The Arena Bites: NEXT, PLANNED / NOT STARTED as of the M4-1 close-out commit.**
 
-The dedicated match-economy design session that earlier versions of this file demanded **has
-happened**. Its output is `docs/plans/M04_0_MATCH_SHAPE_DESIGN.md`, which is **the authority for the
-M4 phase** and supersedes the old "M4 = Push, Freeze, Teleport, Shield" scope entirely. **M4 is a
-phase of seven stages, not one milestone:** M4-0 design (done) · M4-1 Contact · M4-2 The Arena Bites
-· M4-3 The Climax · M4-4 The Long Match · GATE progression judgment · M4-5 Broader Power Set · M4-6
-Economy (conditional).
+`docs/plans/M04_0_MATCH_SHAPE_DESIGN.md` remains **the authority for the M4 phase.** **M4 is a
+phase of seven stages, not one milestone:** M4-0 design (done) · M4-1 Contact (done) · M4-2 The
+Arena Bites (next) · M4-3 The Climax · M4-4 The Long Match · GATE progression judgment · M4-5
+Broader Power Set · M4-6 Economy (conditional).
 
-**Do not implement M4-1 automatically just because this file is read.** The next implementation
-stage is M4-1 — Contact, whose scope, out-of-scope list and five STOP points are fixed in
-`docs/plans/M04_0_MATCH_SHAPE_DESIGN.md` §08 and summarised in `docs/ROADMAP.md`. Read that document
-before planning or writing any M4 code, and confirm the milestone with the Game Director first.
+**Do not implement M4-2 automatically just because this file is read.** M4-2's scope (danger-zone
+architecture, damage rule, authored locations, Push/Freeze interaction, bot minimums, automated
+tests, headless soak) is fixed in `docs/plans/M04_0_MATCH_SHAPE_DESIGN.md` §05.5/§07 and the M4-2
+session brief. Read it before writing any M4-2 code. **Mechanical prototyping, tests and headless
+soaks may proceed without stopping for approval; accepting the result, tuning it permanently, or
+starting M4-3 requires the Game Director.**
 
 **Do not close open questions by assumption.** These are deliberately unresolved and must be settled
 by evidence, not by a future session picking a default: all phase timings and total match duration ·
-**timeout resolution** (a hard-cap/sudden-death rule was proposed and explicitly withdrawn) · the
-health visual treatment (M4-1 STOP 3) · how important environmental damage should become (M4-2) ·
-whether stat progression is needed at all (the GATE after M4-4) · pickup density and respawn interval
-· whether the post-respawn protection window becomes permanent.
+**timeout resolution** (a hard-cap/sudden-death rule was proposed and explicitly withdrawn) · how
+important environmental damage should become (M4-2) · whether stat progression is needed at all (the
+GATE after M4-4) · pickup density and respawn interval · whether the post-respawn protection window
+becomes permanent.
 
 ## Documentation Deliverables
 Milestone plans, audits and reports are written into `docs/` — for milestone work, `docs/plans/` — as a Markdown file (the version a future session reads) and, when the Game Director wants a review copy, an accompanying Word `.docx`. Do not deliver plans as external links; the repository must stay self-sufficient. If both formats exist for one document, the Markdown is authoritative. Note `python-docx` is not installed globally on this machine — install it into the session scratchpad to generate a `.docx`.

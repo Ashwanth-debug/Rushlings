@@ -1,7 +1,18 @@
 # M4-0 — Match Shape Design
 
 **Status: M4-0 COMPLETE / APPROVED (2026-09-12), with Game Director amendments applied.**
-**M4-1: PLANNED / NOT STARTED. Nothing in this document is implemented.**
+**M4-1: COMPLETE / ACCEPTED (2026-09-12).** Full close-out record: `docs/DECISIONS.md`. M4-2 is
+next. This document's text below is preserved as written at M4-0 approval, per this project's
+standing rule against deleting superseded text — it is the historical record of what was approved
+*before* M4-1 was built and played.
+**Post-M4-1 amendment (2026-09-12), read this before trusting §04.2/§05.6 below at face value:**
+M4-1 human playtesting found that Rocket as the *only* damage source among three equally scarce
+powers made reducing health too slow. **Push and Freeze now also deal 1 pip of damage on a
+successful hit**, in addition to Rocket — superseding the "Push = 0, Freeze = 0" rule stated in
+§04.2 and §05.6 below. Their category and non-damage identity (displacement / temporary control) are
+unchanged; this is a finding about this specific power set, not a reopening of the Control/Damage
+taxonomy, and does not mean every future Control power must deal damage. Full reasoning and
+organic-play evidence: `docs/DECISIONS.md` (2026-09-12, "Damage-model amendment").
 Written 2026-09-12, immediately after `MILESTONE 3 — CORE GAME LOOP` was accepted at commit
 `de0d410`. No game code, scene, or tool was modified in producing it.
 
@@ -201,13 +212,17 @@ then.
 
 ### 04.2 Damage sources
 
-| Source | Damage |
+**SUPERSEDED at M4-1 (2026-09-12) for Push and Freeze — see the status banner at the top of this
+document and `docs/DECISIONS.md`'s "Damage-model amendment".** The table below is preserved as
+originally approved.
+
+| Source | Damage (as originally approved) |
 |---|---|
 | Arena hazard contact | 1 |
 | Offensive power hit (Rocket) | 1 |
-| Push | **0** |
-| Freeze | **0** |
-| Falling | **0** |
+| Push | ~~0~~ → **1** (M4-1 amendment) |
+| Freeze | ~~0~~ → **1** (M4-1 amendment) |
+| Falling | **0** (unchanged) |
 
 **Every damage instance is exactly 1 pip.** A universal rule beats special cases for readability.
 
@@ -377,12 +392,16 @@ opponent. If that is how it plays, wind is the fallback, and the finding itself 
 
 ### 05.6 Push vs damage — distinct identities
 
+**Direct damage row SUPERSEDED at M4-1 (2026-09-12)** — Push now deals 1 pip too (see the status
+banner at the top of this document). The rest of the table, and the design goal it states, are
+unchanged: Push's identity is still its displacement effect, not its damage.
+
 | | Push | Rocket |
 |---|---|---|
 | Category | Control | Damage |
-| Direct damage | **0** | 1 |
+| Direct damage | ~~0~~ → **1** (M4-1 amendment) | 1 |
 | Effect | Displacement impulse | Health reduction |
-| Lethality | Contextual — via hazard delivery | Direct |
+| Lethality | Contextual — via hazard delivery, now also direct | Direct |
 | Skill | Positional / environmental manipulation | Ranged pressure and firing lines |
 
 Preserving this split is a design goal, not an accident. Control powers move and deny; damage

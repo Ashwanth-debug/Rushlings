@@ -429,8 +429,8 @@ If the game is not fun as shapes, do not proceed directly to art. Diagnose movem
 produce schedule surprise.
 
 **M4-0 — Match Shape Design: [x] COMPLETE / APPROVED (2026-09-12).**
-**M4-1 — Contact: [ ] PLANNED / NOT STARTED.** No M4 gameplay code, scene, tool or project setting
-exists.
+**M4-1 — Contact: [x] COMPLETE / ACCEPTED (2026-09-12).** Full record: `docs/DECISIONS.md`.
+**M4-2 — The Arena Bites: [ ] NEXT, PLANNED / NOT STARTED.**
 
 ## Authority
 **`docs/plans/M04_0_MATCH_SHAPE_DESIGN.md` is the authority for this phase** and supersedes any
@@ -472,8 +472,8 @@ Full detail in `docs/GAME_DESIGN.md` §7A, §8A, §10, §11.
 | Stage | Status | The one question it answers | Contents |
 |---|---|---|---|
 | **M4-0** Match Shape Design | **[x] COMPLETE / APPROVED** | *What is a Rushlings match?* | The design document. No code. |
-| **M4-1** Contact | **[ ] PLANNED / NOT STARTED** | **Does hurting each other feel good?** | Push + Rocket + Freeze · one-use, carry-one, pickup · 3-pip health · defeat → spill → respawn · minimal safe-respawn · protection-window prototype. **No Relic change, no hazards, no long match.** |
-| **M4-2** The Arena Bites | [ ] Not started | **Does arena-as-opponent improve the game?** | Escalating danger zones with a mandatory warning → active → safe cycle. First real test of Push-is-displacement-only. Determines how important environmental damage should become. |
+| **M4-1** Contact | **[x] COMPLETE / ACCEPTED (2026-09-12)** | **Does hurting each other feel good?** | Push + Rocket + Freeze · one-use, carry-one, pickup · 3-pip health · defeat → spill → respawn · minimal safe-respawn · protection-window prototype. **Damage-model amendment: all three powers now deal 1 pip on hit, not just Rocket** — see `docs/DECISIONS.md`. No Relic change, no hazards, no long match. |
+| **M4-2** The Arena Bites | **[ ] NEXT** | **Does arena-as-opponent improve the game?** | Escalating danger zones with a mandatory warning → active → safe cycle. First real test of Push-is-displacement-only (now also Push-deals-1-pip, per the M4-1 amendment). Determines how important environmental damage should become. |
 | **M4-3** The Climax | [ ] Not started | **Does carry-to-locked-extraction produce a great ending?** | Relic carry · five authored region anchors · selected once and locked for the round · drop-on-defeat · **Mine**. |
 | **M4-4** The Long Match | [ ] Not started | **Does ~2 minutes hold attention?** | BUILD → ESCALATE → CLIMAX phase clock · Tier 1/2/3 access schedule · hazard escalation schedule · real timing measurement · **resolves the open timeout question**. |
 | **GATE** Progression judgment | [ ] Not started | *Is access escalation enough?* | Decide from human evidence whether stat progression is needed at all. |
@@ -484,13 +484,19 @@ Full detail in `docs/GAME_DESIGN.md` §7A, §8A, §10, §11.
 people into. Testing the climax first would judge a version of combat that is not the intended
 shipping version. The cost is that there is no complete playable game until M4-3.
 
-## M4-1 — the only stage currently scoped
+## M4-1 — COMPLETE / ACCEPTED (2026-09-12)
+
+**Status: ACCEPTED** by the Game Director after human playtesting confirmed every STOP point. Full
+record: `docs/DECISIONS.md` (2026-09-12, M4-1 close-out entries). The scope, STOP points and
+acceptance criteria below are preserved as written at approval — the M4-1 Closeout section after
+them records what actually happened, including the damage-model amendment discovered during
+playtesting.
 
 ### Risk Being Tested
 Does player-to-player interference create the social/chaotic fun Rushlings needs, without becoming
 confusing?
 
-### Approved power set
+### Approved power set (as scoped; see Closeout below for the amendment)
 | Power | Category | Damage | Skill it tests |
 |---|---|---|---|
 | **Push** | Control / displacement | **0** | Positional and environmental manipulation |
@@ -545,13 +551,52 @@ M4-1 is one coherent milestone with internal human gates.
   `m3_check.gd` edge-sampling findings remain acknowledged, not silently patched.
 - Remove or redesign any power that reduces fun.
 
+## M4-1 Closeout — DONE (2026-09-12)
+
+- **Accepted** by the Game Director after human playtesting confirmed all five STOP points: pickup/
+  carry-one/replacement, one-use consumption, Push/Rocket/Freeze all working and feeling distinct,
+  3-pip health readable at full-arena scale, defeat/spill/collection/respawn all working, and
+  player-to-player interference judged to make Rushlings more fun.
+- **Damage-model amendment, discovered during STOP 2/3/4 playtesting:** the M4-0 assumption that
+  Push and Freeze deal zero direct damage is **superseded for the current prototype**. All three
+  hostile powers (Push, Rocket, Freeze) now deal exactly 1 pip on a successful hit — routed through
+  the same `HealthSystem.apply_damage()` path regardless of source — while keeping distinct
+  strategic identities through their non-damage effect: Push = damage + displacement, Rocket =
+  damage + range, Freeze = damage + temporary control. **Do not generalize this into "all future
+  powers must deal damage"** — it is a finding about this specific power set, not a new rule. Full
+  reasoning and organic-play evidence: `docs/DECISIONS.md` (2026-09-12).
+- **Health visual treatment resolved at STOP 3**: character-integrated (three pips above the body,
+  plus flash/tint feedback on a hit), not a percentage bar. Selected through playtesting as approved
+  at M4-0 §04.1.
+- **Accepted prototype tuning values** (not production balance): health 3 pips · Push/Rocket/Freeze
+  each 1 pip on hit · Freeze duration 1.0s (tunable, `debug_cycle_freeze_duration`) · defeat duration
+  1.5s (revised down from an initial 3.0s — the Game Director found 3.0s "noticeably too slow") ·
+  spawn protection 0.8s · pickup respawn 6.0s (a test-harness knob, not a shipping value) · carry-one
+  / one-use · player↔player collision OFF (unchanged).
+- **Regression requirement met**: `tools/arena_check.gd` re-verified passing (exit 0) on the exact
+  M4-1 tree, with `PowerSystem`/`HealthSystem` disabled during its run (a geometry/traversal-only
+  checker cannot tolerate a bot legitimately Push/Freezing the checker's own test subject mid-route —
+  player interference is real M4-1 behaviour, tested separately). `tools/m4_1_check.gd` (new,
+  permanent M4-1 regression tool) passes all deterministic PASS/FAIL sections with 0 failures.
+  `tools/m3_check.gd` re-run in full, twice: the four previously-acknowledged edge-sampling findings
+  reproduce identically both times, unchanged. **A fifth finding was newly discovered by this
+  close-out's own verification** — a rare NAV STRESS destination-reliability failure plus a related
+  `_test_determinism()` WARN, both load/timing-sensitive and confirmed independent of M4-1/M4-2 (an
+  isolated re-run of the failing test alone passed cleanly; danger zones are provably inert during
+  this checker). Recorded as a fifth acknowledged finding, not silently patched — see
+  `docs/DECISIONS.md` (2026-09-12) for the full evidence.
+- **Known gap, not resolved, not blocking**: M4-1's own risk register flagged that organic defeats
+  might be rare with no hazards yet. A 90s organic-play diagnostic (3 bots + idle P1, current pickup
+  density) recorded only 1 organic defeat in that window even with all three powers now dealing
+  damage — confirming the concern was real, and that M4-2's hazards are the next lever, not further
+  M4-1 tuning.
+
 ## Open questions this phase must answer with evidence, not argument
 - All phase timings and total match duration.
 - **Timeout resolution** — what happens at the time limit. A hard-cap/sudden-death rule was
   proposed at M4-0 and **explicitly withdrawn**. Candidates recorded without selection: current
   carrier wins · overtime · extraction stays active while arena pressure escalates · another
   sudden-death structure · another evidence-driven solution. Resolved at M4-4.
-- The health visual treatment (M4-1 STOP 3).
 - How important environmental damage should actually become (M4-2).
 - Whether stat progression is needed at all (the GATE, after M4-4).
 - Pickup density and respawn interval.
@@ -560,7 +605,8 @@ M4-1 is one coherent milestone with internal human gates.
 ## Known risks
 1. **Readability is the binding constraint, not code** — four tiny characters, health states,
    carried-power indicators, three tiers of pickups, hazard zones, a carried Relic and an
-   extraction beacon on one fixed screen. Expect a milestone spent on readability alone.
+   extraction beacon on one fixed screen. M4-1 alone (pips + one power indicator) read clearly;
+   M4-2's hazard zones are the next readability test, not yet a proven risk realised.
 2. **Bot cost is the largest hidden number** — hazard avoidance is the expensive addition.
    Navigation alone took two milestones and ~39K of `scripts/bot_brain.gd`.
 3. **The stalemate case** — a carrier repeatedly defeated near extraction. No approved rule

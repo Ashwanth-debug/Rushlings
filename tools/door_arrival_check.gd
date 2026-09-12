@@ -65,6 +65,8 @@ func _run() -> void:
 	# isolated movement measurement for the rest of the run.
 	arena.get_node("MatchDirector").set_physics_process(false)
 	arena.get_node("Relic").set_physics_process(false)
+	arena.get_node("PowerSystem").set_physics_process(false)  # M4-1 STOP 1+2 - see tools/arena_check.gd's identical fix
+	arena.get_node("HealthSystem").set_physics_process(false)  # M4-1 STOP 3+4 - same reasoning, defence-in-depth
 	graph.set_gate_open(true)  # redundant after debug_force_open(), kept explicit
 
 	var hz := physics_ticks_per_second()

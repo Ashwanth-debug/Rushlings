@@ -347,18 +347,30 @@ Scarcity, not a cooldown, throttles combat frequency. This keeps pickups valuabl
 match, makes every use a decision, and pulls a player back into the arena to rearm after using
 one. No inventory, no charges, no levels.
 
-### Power taxonomy and tiers (M4-0, approved 2026-09-12)
+### Power taxonomy and tiers (M4-0, approved 2026-09-12; damage column amended at M4-1, 2026-09-12)
 
 A taxonomy for organising the design space. **Not an implementation list.**
 
 | Category | Does | Examples | Damage? |
 |---|---|---|---|
-| **Control** | Denies or redirects movement | Push, Freeze, forced Teleport | No |
+| **Control** | Denies or redirects movement | Push, Freeze, forced Teleport | **See amendment below** |
 | **Damage** | Reduces health directly | Rocket / projectile, blast | Yes |
 | **Denial** | Placed, persistent, rewards prediction | Mines, traps | Yes |
 | **Defense** | Negates incoming harm | Shield, rotating shield | — |
 | **Mobility** | Improves your own traversal | Self-teleport, dash, personal launch | No |
 | **Summon** | Autonomous agent | Golem, pet, guardian | Yes |
+
+**M4-1 damage-model amendment (2026-09-12).** M4-1 human playtesting found that with Rocket as the
+*only* damage source among three equally scarce, one-use, carry-one powers, reducing a player's 3
+pips took too long — Push and Freeze were fully functional and felt good, but contributed nothing to
+the health/defeat loop. **Push and Freeze now also deal 1 pip of damage on a successful hit**,
+alongside Rocket. Their category and non-damage identity are unchanged — Push is still Control/
+displacement, Freeze is still Control/denial — the taxonomy's Control-vs-Damage split is about
+*category*, not a permanent damage-exemption for every Control power. **Do not read this as "every
+Control power must deal damage"**: it is a finding about this specific three-power M4-1 set, made
+because M4-2's hazards (the design's other intended damage lever) did not exist yet when it was
+tested. Shield (Defense, M4-5) remains a power that must not deal damage. Full reasoning and
+evidence: `docs/DECISIONS.md` (2026-09-12, "Damage-model amendment").
 
 **Summons are parked hardest of all** — a pet or golem needs its own navigation, i.e. a fifth AI on
 top of a bot system that already cost two milestones. Not an M4 candidate at any stage.
@@ -409,14 +421,17 @@ sources of a shooter.
 > Health state must be immediately readable at normal full-arena gameplay scale, without
 > introducing a conventional percentage health bar.
 
-**The visual treatment is deliberately NOT chosen.** Candidates recorded as hypotheses only — small
-dots or pips, a ring or outline, a segmented indicator, character-integrated treatment (dimming,
-cracking, flicker, silhouette), or something else. **M4-1 STOP 3 selects it through human
-playtesting.**
+**The visual treatment was selected at M4-1 STOP 3 (2026-09-12) through human playtesting:**
+three small character-integrated pips above the body (lit when alive, dimmed when lost), plus a
+brief flash/tint on the body itself when a hit lands. Read clearly at normal full-arena gameplay
+scale, with no percentage bar. See `docs/DECISIONS.md` (2026-09-12).
 
 **Damage:** every damage instance is exactly 1 pip. Arena hazard contact = 1. Rocket = 1. **Push =
-0. Freeze = 0. Falling = 0** — fall damage would retune accepted M1 movement feel, and M1 is
-closed. Impact damage (being slammed into geometry) is deferred, not rejected.
+1, Freeze = 1** — amended at M4-1 (2026-09-12) from the original M4-0 approval of 0/0; see
+`docs/DECISIONS.md`'s "Damage-model amendment" for the full reasoning and evidence, and do not read
+this as "every control power must deal damage" — it is a finding about this specific power set.
+**Falling = 0** — fall damage would retune accepted M1 movement feel, and M1 is closed. Impact
+damage (being slammed into geometry) is deferred, not rejected.
 
 ### Health does not prescribe behaviour — EXPLICIT RULE (2026-09-12)
 
@@ -626,10 +641,10 @@ Current principle:
 - Avoid ability toolbar.
 - Avoid minimap.
 - Avoid health bars. **Health exists as of the M4 direction (§11), but as three coarse states —
-  `Healthy → Hurt → Critical` — never as a percentage bar.** The visual treatment is deliberately
-  unchosen and is selected by M4-1 STOP 3; candidates include small dots/pips, a ring or outline, a
-  segmented indicator, or character-integrated treatment. The binding requirement is only that
-  health be immediately readable at normal full-arena scale without a conventional percentage bar.
+  `Healthy → Hurt → Critical` — never as a percentage bar.** The visual treatment was selected at
+  M4-1 STOP 3 (2026-09-12) through human playtesting: three small character-integrated pips above
+  the body, plus a brief flash/tint on a hit. It reads clearly at normal full-arena scale without a
+  conventional percentage bar.
 - The activated extraction portal is communicated by the arena itself (the anchor lights/rises),
   not by a HUD element — the fixed camera already shows the whole arena.
 - Avoid tutorial copy during normal matches.

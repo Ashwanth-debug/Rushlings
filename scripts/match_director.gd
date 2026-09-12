@@ -32,7 +32,26 @@ var clock: float = 0.0
 var winner_slot_id: int = -1
 var results_dwell: float = 0.0
 
+## M4-1 dev-only Contact Lab mode (CLAUDE.md M4-1 S11): the accepted M3 match
+## resolves in ~10s, far too fast for pickup/power interaction to actually
+## occur. Rather than changing setup_duration itself (which would touch the
+## accepted M3 match), Contact Lab simply freezes the SETUP clock forever -
+## the vault stays sealed (no Relic/extraction change, per M4-1 scope), and
+## players/bots keep roaming and using powers indefinitely. Toggled from
+## arena_01.gd's debug_contact_lab key.
+var contact_lab: bool = false
+
+func enter_contact_lab() -> void:
+	reset_round()
+	contact_lab = true
+
+func exit_contact_lab() -> void:
+	contact_lab = false
+	reset_round()
+
 func _physics_process(delta: float) -> void:
+	if contact_lab:
+		return
 	match state:
 		State.SETUP, State.UNLOCKING:
 			clock += delta

@@ -222,6 +222,21 @@ func _load_arena() -> void:
 	# effect of forcing the gate open for its own purposes.
 	arena.get_node("MatchDirector").set_physics_process(false)
 	arena.get_node("Relic").set_physics_process(false)
+	# M4-1 STOP 1+2: same reasoning as MatchDirector/Relic above, for the same
+	# failure shape. PowerSystem polls every player for a pressed power action
+	# every physics frame regardless of match state, and bots roaming in the
+	# background can now legitimately Push/Freeze whichever body they find
+	# nearby - including Slot1 mid-route. A bot shoving the checker's own test
+	# subject off a ladder mid-climb is real M4-1 behaviour, not a bug, but it
+	# makes Slot1's route no longer deterministic, which is what this checker
+	# is geometry/traversal only and cannot tolerate. Player-vs-player
+	# interference itself is tested separately in tools/m4_1_check.gd.
+	arena.get_node("PowerSystem").set_physics_process(false)
+	# M4-1 STOP 3+4: HealthSystem can only ever act on a real power_hit signal
+	# from PowerSystem (a Rocket landing), which the line above already makes
+	# impossible here - disabled anyway, for the same defence-in-depth reason
+	# and so a later change to either system can't silently reopen this.
+	arena.get_node("HealthSystem").set_physics_process(false)
 
 func _aabb_of(body: Node2D) -> Dictionary:
 	var cs := body.get_node("CollisionShape2D") as CollisionShape2D
