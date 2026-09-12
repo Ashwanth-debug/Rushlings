@@ -1717,3 +1717,340 @@ position, a debug-key-driven bars-lifting prototype, the minimal anti-bypass col
 optionally the Relic dim/bright states. **The `MatchDirector` loop, `SEEK_RELIC`, winner detection,
 results, rematch and fairness logic must not be built at Step 1** — not partially, not as disabled
 stubs — until the Director approves STOP 1 by visual inspection.
+
+## 2026-09-12 — M4-0 Match Shape Design: COMPLETE / APPROVED
+
+**Status: APPROVED** by the Game Director after two review rounds. Full document:
+`docs/plans/M04_0_MATCH_SHAPE_DESIGN.md`, which is **the authority for the M4 phase** and
+supersedes the old M4 section of `docs/ROADMAP.md`.
+
+**M4-1 is PLANNED / NOT STARTED.** No M4 gameplay code, scene, tool or project setting exists.
+
+**Why M4 was re-planned rather than executed as written.** The old M4 said: implement Push, Freeze,
+Teleport, Shield, one at a time. That ordering was sound; the defect was elsewhere — **there was no
+match for a power to live inside.** M3-2's own telemetry measured median OPEN→win at ~0.00s. Ten
+seconds of sealed roaming followed by a resolution too fast for any interference to change an
+outcome would have produced four powers that were individually implemented and collectively
+unevaluable.
+
+**The approved match:** `BUILD → ESCALATE → CLIMAX`, ending in a carry-to-locked-extraction
+objective. Two escalation curves run together — player capability by power *access tier*, and arena
+threat by hazard schedule. Detail in `docs/GAME_DESIGN.md` §7A, §8A, §10, §11.
+
+**Superseded M3-era assumptions** (marked as superseded in `docs/GAME_DESIGN.md`, not deleted):
+first-touch-wins as the *final* objective · "baseline mode should not eliminate players" · M4 as
+simply Push → Freeze → Teleport → Shield.
+
+**M4 is a phase of seven stages**, not one milestone: M4-0 design (done) · M4-1 Contact · M4-2 The
+Arena Bites · M4-3 The Climax · M4-4 The Long Match · GATE progression judgment · M4-5 Broader
+Power Set · M4-6 Economy (conditional).
+
+---
+
+## 2026-09-12 — The M4-1 power set: Push + Rocket + Freeze. Mine → M4-3, Shield → M4-5
+
+**Status: APPROVED.**
+
+| Power | Category | Direct damage | Skill it tests |
+|---|---|---|---|
+| Push | Control / displacement | 0 | Positional and environmental manipulation |
+| Rocket | Direct ranged damage | 1 | Ranged pressure and firing lines |
+| Freeze | Movement / control denial | 0 | Timing and denial |
+
+**Why Shield was deferred to M4-5.** In M4-1 Shield is either *passive* (auto-absorbs the next hit,
+testing nothing about the contextual action verb) or *manually timed* (nearly impossible to time
+against scarce one-use ranged attacks, yielding almost no signal). Shield is counterplay to a threat
+density that does not exist until M4-2's hazards and M4-5's wider power set.
+
+**Why Mine was deferred to M4-3, not dropped.** Mines reward predicting *where someone must go*. In
+M4-1 there is no Relic carry, no locked extraction and no objective — nobody is going anywhere
+predictable, so mines would be tested in the one context where they cannot work, risking a false
+negative on a high-fit mechanic. The locked-extraction rule is what creates predictable routes, and
+it arrives at M4-3. Mine is also the most expensive candidate on both binding constraints: **bot
+cost** (needs dynamic path avoidance in `_weighted_cost()`, or three of four players walk into mines
+repeatedly and mines read as overpowered) and **readability** (a placed mine is a small static shape
+among other small static shapes at greybox scale).
+
+**Why Freeze was chosen as the third power.** It is unusually cheap because it shares infrastructure
+M4-1 must build anyway — the input-lock that defeat requires, and the character-state readability
+channel that 3-pip health requires. It also sets up M4-2 directly.
+
+**Recorded limitation: Rocket cannot test aim skill in M4-1.** True aim needs an aiming input, which
+the "movement + one contextual power action" guardrail forbids and M5 has not solved. Rocket fires
+in facing direction and tests ranged pressure and positioning, **not aim**. That limitation is itself
+a useful early finding for M5.
+
+**Recorded gap: M4-1 may not generate enough organic defeats.** With no hazards yet, powers are the
+only damage source; at 1 damage per hit and 3 pips a defeat costs three separate pickups across four
+competing players. Mitigations are explicitly test-harness measures — pickup density as a tuning knob
+(not a shipping value), and a debug damage key to exercise the defeat → spill → respawn chain
+mechanically. Organic defeat frequency becomes a *measured finding* of M4-1.
+
+---
+
+## 2026-09-12 — "You feed them to the arena" is an ASPIRATION, not a proven rule
+
+**Status: the aspiration is APPROVED. The stronger claim is NOT approved.**
+
+**Approved as a strong Rushlings design aspiration:**
+
+> You don't kill your friends. You feed them to the arena.
+
+**Explicitly NOT approved, and must not be encoded:** *"the arena is the primary damage source."*
+M4-2 has not yet established that arena hazards are fun, let alone that environmental damage should
+literally become the game's main source of lethality.
+
+**Approved wording:** the arena is *intended to become* a major source and amplifier of danger, while
+powers provide deliberate player-driven interference. **M4-2 determines through human playtesting how
+important environmental damage should actually become.**
+
+**Do not architect health around an assumption that hazards have already succeeded.** Coarse 3-pip
+health is deliberately robust to the outcome — it works whether environmental damage turns out major
+or minor. If M4-2 finds danger zones are not fun, the response is re-planned *then* with that
+evidence — by adjusting power tier density, the damage mix, or the arena primitive — not by assuming
+this aspiration held.
+
+**Preserved regardless of the outcome:** Push = 0 direct damage · Rocket = direct damage · Freeze = 0
+direct damage · danger zones = the M4-2 experiment · wind/blowers = the immediate fallback and
+follow-up candidate.
+
+**Why this correction was made.** The first draft of `M04_0_MATCH_SHAPE_DESIGN.md` stated the arena
+as the primary damage source as though it were settled, and derived the health model from it. That
+would have made an unvalidated M4-2 hypothesis load-bearing for a system built in M4-1 — the same
+mistake the project's own standing rule against pre-emptive fixes exists to prevent.
+
+---
+
+## 2026-09-12 — Health never prescribes player or bot behaviour
+
+**Status: APPROVED as an explicit rule.**
+
+**Health is information and vulnerability. It is not a behavioural state.** Any rule of the form
+*"low health → retreat / hide / disengage"* is **explicitly rejected**.
+
+At Critical health a player remains completely free to attack, chase another player, collect a power,
+contest the Relic, take a risky route, hide, escape, or deliberately play aggressively. Being on one
+pip is a situation the player reads and responds to as they choose, not a mode the game puts them in.
+
+**Binding consequences:**
+- **Do not alter human movement, available actions, inputs or power access based on health.** The
+  only state that changes what a player can do is `Defeated` at zero.
+- **Do not add automatic low-health retreat behaviour to bots.** No flee goal, no defensive mode, no
+  health-keyed threat weighting. A bot on one pip plays exactly as it does on three.
+- Health may be *read* by systems that display it, never by systems that decide what a player or bot
+  is allowed or inclined to do.
+
+**Future scope, explicitly not M4:** if bot personalities or strategies are introduced later
+(`docs/GAME_DESIGN.md` §13, §24), different bots may legitimately make different risk decisions,
+including cautious ones. That is a future bot-intelligence question and **is not an M4-0 or M4-1
+rule**. Nothing in M4 may pre-empt it.
+
+**Note on §25's original wording:** the "Future match structure" entry below (same date) included
+"low-health players should have reason to retreat/hide." **That specific line is superseded by this
+entry.** The rest of §25 stands as recorded.
+
+---
+
+## 2026-09-12 — Coarse 3-pip health; the visual treatment is deliberately unchosen
+
+**Status: the health model is APPROVED. The visual treatment is OPEN.**
+
+```
+Healthy (3)  →  Hurt (2)  →  Critical (1)  →  Defeated (0)
+```
+
+**No percentage health bar.** Four bars on one fixed screen, over deliberately tiny characters,
+contradicts `docs/GAME_DESIGN.md` §18 and the §19 readability hierarchy — and a percentage implies
+the many small damage sources of a shooter, which `CLAUDE.md` rules out.
+
+**Every damage instance is exactly 1 pip.** A universal rule beats special cases for readability.
+Arena hazard contact = 1 · Rocket = 1 · Push = 0 · Freeze = 0 · **falling = 0**.
+
+**Falling deals no damage, deliberately** — fall damage would retune accepted M1 movement feel, and
+M1 is closed. **Impact damage** (being slammed into geometry) is deferred, not rejected: it needs a
+velocity threshold that never misfires during ordinary movement, and getting that wrong makes M1
+movement punishing.
+
+**The binding requirement, and the only one:**
+
+> Health state must be immediately readable at normal full-arena gameplay scale, without introducing
+> a conventional percentage health bar.
+
+**The visual treatment is NOT locked.** Candidates recorded as hypotheses only, none selected: small
+dots or pips · a ring or outline treatment · a segmented indicator · character-integrated treatment
+(dimming, cracking, flicker, silhouette change) · another solution found while prototyping.
+**M4-1 STOP 3 selects it through human playtesting.**
+
+---
+
+## 2026-09-12 — Unlimited respawns with cost; limited lives rejected for a ~2-minute match
+
+**Status: APPROVED. Supersedes `docs/GAME_DESIGN.md` §11's "baseline mode should not eliminate
+players."**
+
+Player defeat and respawn are now intended. The principle the old rule protected is preserved and
+strengthened — **nobody sits watching a match** — which is precisely *why* respawns are unlimited.
+
+**The comparison that decided it.** Limited lives (~3) give higher stakes, but a player eliminated at
+60s of a 2-minute match watches for a minute, which violates §11's own "nobody should sit watching a
+match for long", removes the losing player from their own comeback, and costs far more code
+(elimination state, spectator handling, a last-player-standing end condition interacting with the
+Relic objective). Unlimited respawn is also trivially reversible — adding lives later is easy,
+removing them after players expect them is not.
+
+**The cost of a defeat is already real:** seconds out of play, your carried power spills as a
+contestable world pickup, your position is lost, and the Relic drops if you held it.
+
+**Respawn placement — minimal, deliberately.** Reuse the existing authored `Spawn1–4` markers; on
+respawn pick the one **furthest from the nearest living opponent**. Never arbitrary world
+coordinates. **Do not build a sophisticated spawn director.** A weighted multi-factor system would be
+solving a problem that has not been observed, against the project's standing precedent that
+measurement precedes balancing. If four anchors prove insufficient, add anchors and a real score
+*then*, with evidence.
+
+**Post-respawn protection window (~0.75–1.0s): PROTOTYPE HYPOTHESIS ONLY.** Prototyped at M4-1. It
+must not be treated as a shipped rule without playtest evidence.
+
+**Loot spill needs no separate resource layer.** On defeat a player's carried active power spills
+into the arena as a world pickup — *that is the loot*. With one-use powers a spilled power is
+genuinely valuable, and it reuses the pickup entity that must exist anyway. A separate currency would
+need a per-player counter, a HUD readout, a spend mechanism and bot valuation logic, all four of
+which were ruled out. A defeated carrier drops **both** the Relic and their power, making the carrier
+the most rewarding target in the match.
+
+---
+
+## 2026-09-12 — The extraction is selected ONCE per round and then locked
+
+**Status: APPROVED.** This is a Game Director revision of the design's first draft, which proposed
+recalculating the extraction whenever the carrier changed. **That earlier proposal is superseded.**
+
+**Five authored extraction anchors, one per existing arena region.** `scripts/arena_regions.gd`
+already defines `floor`, `west`, `central`, `east`, `seam` as a wrap-aware loop in `REGION_ORDER`,
+and already ships `region_distance()`. Anchors map one-to-one onto them. **Never arbitrary world
+coordinates.**
+
+**On the first successful Relic pickup of a round:** determine the first carrier's region → select
+the anchor at maximum region-distance from it → break ties with deterministic per-round seeded RNG →
+activate and reveal it to all players → **lock it for the remainder of the round.**
+
+| First grab in | Extraction activates at |
+|---|---|
+| central (the vault) | west **or** seam |
+| floor | east **or** seam |
+| west | central **or** east |
+| east | west **or** floor |
+| seam | floor **or** central |
+
+**It must NOT recalculate** on carrier defeat · Relic drop · another player picking up the Relic ·
+repeated ownership changes · player respawn. Worked example: *P1 picks up → West activates; P1
+defeated, Relic drops → West remains; P3 picks up → West remains; P3 defeated, P4 picks up → West
+remains.* New selection happens only in the next round.
+
+**Why locked rather than dynamic.** The design goal is **unpredictable before first pickup → clearly
+revealed → strategically stable for the rest of the climax.** Once revealed, all players share one
+destination and can act on it: the carrier picks a route, opponents intercept, players hold
+chokepoints or place traps along predicted routes, others race ahead. A relocating extraction would
+destroy objective readability and make strategic prediction meaningless — and prediction is what
+Rushlings is built on.
+
+**What the rule satisfies:** not campable before pickup (the anchor is a function of where the grab
+happens, unknowable in advance) · minimum distance guaranteed by construction, always two region-hops
+· accounts for carrier position, in the direction that forces travel · fair, because it is computed
+relative to the carrier, so P2's recorded spawn-proximity advantage no longer compounds · **learnable
+rather than lucky**, since a skilled player knows a vault grab means west-or-seam and can move on a
+50/50 read before the beacon resolves.
+
+**Players are informed by the arena itself** — the anchor physically activates, plus a short global
+flash and sound. The fixed camera already shows the whole arena, so that *is* the notification. No
+minimap, no HUD element.
+
+**Effect on the accepted Arena 01 roof strategy.** A vault grab is a central-region grab, so the
+extraction always activates at maximum distance. The roof camper now takes the Relic first and
+immediately faces the longest possible carry, from the most exposed platform, at three pips, against
+three converging players. Camping becomes a legitimate opening with a real cost — a **structural**
+answer to the question left open on 2026-09-12, rather than the hoped-for combat counterplay.
+**It still requires human playtesting before being recorded as solved.**
+
+---
+
+## 2026-09-12 — Timeout resolution is an OPEN question; the hard-cap rule is WITHDRAWN
+
+**Status: NOT APPROVED. Deliberately unresolved.**
+
+The first draft of `M04_0_MATCH_SHAPE_DESIGN.md` proposed: *hard cap reached with a carrier → the
+holder wins; hard cap reached with no carrier → sudden death, the extraction requirement drops and
+first touch wins.* **That rule is withdrawn and must not be implemented, nor treated as a default by
+a future session.**
+
+**The approved core objective is unchanged:** Relic pickup → extraction activates once → extraction
+locks for the round → carrier attempts extraction → carrier defeat drops the Relic → another player
+can continue toward the **same** extraction. **Extraction reached → that player wins** is the only
+approved end condition.
+
+The ~2-minute duration remains a hypothesis, and **timeout resolution is a separate open question.**
+Candidate experiments, recorded **without selecting one**: the current carrier wins · overtime · the
+extraction remains active while arena pressure escalates · another sudden-death structure · another
+evidence-driven solution not yet identified.
+
+**Do not design or implement the answer now.** Resolved at M4-4, when real match pacing is measured
+for the first time.
+
+**Known consequence, accepted:** the stalemate case — a carrier repeatedly defeated near extraction
+so nobody ever extracts — currently has **no approved resolution**. That is a known, accepted gap.
+Levers held in reserve if it proves common: a brief grace period on pickup, or a carrier speed
+change. Named, deliberately not designed.
+
+---
+
+## 2026-09-12 — One-use powers; the power taxonomy and access tiers
+
+**Status: APPROVED as the current hypothesis.**
+
+> One carried active power → one use → empty → collect again.
+
+**Scarcity, not a cooldown, throttles combat frequency.** This keeps pickups valuable for the entire
+match (not only early), makes every use a decision, and disarms a player after use so they are pulled
+back into the arena to rearm. Cooldowns were rejected: they leave everyone permanently armed and push
+the game toward a brawler.
+
+**Functional categories** — a taxonomy for organising the design space, **not an implementation
+list**: Control (Push, Freeze, forced Teleport — no damage) · Damage (Rocket, blast) · Denial (mines,
+traps) · Defense (Shield) · Mobility (self-teleport, dash) · Summon (golem, pet, guardian).
+
+**Summons are parked hardest of all** — a pet or golem needs its own navigation, i.e. a fifth AI on
+top of a bot system that already cost two milestones and left four deferred navigation findings. Not
+an M4 candidate at any stage.
+
+**Tiers drive access escalation** — what exists to be found changes over the match, while the
+carry-one rule never does. Tier 1 (BUILD, common easy routes) · Tier 2 (ESCALATE, contested
+hard-to-reach spots) · Tier 3 (CLIMAX, rare, most exposed positions). Tier 2/3 spawn points should be
+the spots already identified on 2026-09-06 as *"intentionally hard to reach, high pickup value"* —
+`B_Under`, `Pier`, the upper bands, the vault header.
+
+**Access escalation, not stat progression.** No inventory, no XP, no currency, no charges, no upgrade
+levels. **Whether stat progression is needed at all is deferred to the GATE after M4-4**, to be
+decided from human evidence rather than assumption.
+
+---
+
+## 2026-09-12 — Known M4 risks recorded at approval
+
+**Status: RECORDED, not acted on.**
+
+1. **Readability is now the binding constraint, not code.** One fixed screen must carry four tiny
+   characters, their health states, carried-power indicators, pickups at three tiers, active hazard
+   zones, a carried Relic and an extraction beacon. §19's hierarchy will be under real pressure.
+   Expect at least one milestone spent on readability alone, and plan for it rather than discovering
+   it.
+2. **Bot cost is the largest hidden number.** Bots will eventually need seek-pickup, use-power,
+   chase-carrier, carry-to-extraction and defeat/respawn handling, plus **hazard avoidance** — the one
+   genuinely expensive addition. Navigation alone took two milestones and ~39K of
+   `scripts/bot_brain.gd`. Build hazard-avoidance crudely on purpose. **Low-health retreat is not on
+   this list and must not be added.**
+3. **The stalemate case** — see the timeout entry above. No approved resolution yet.
+4. **Rocket cannot test aim** until M5 resolves mobile controls.
+5. **Danger zones may read as arbitrary punishment** in greybox. Wind is the fallback.
+6. **M4 is seven stages.** Treating it as one milestone will produce schedule surprise.
+
+---

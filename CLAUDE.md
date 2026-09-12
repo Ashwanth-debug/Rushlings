@@ -8,11 +8,17 @@ The owner is a product/design leader building their first game. Treat them as th
 ## Read First
 At the start of every implementation session:
 1. Read this file.
-2. Read `docs/GAME_DESIGN.md`.
-3. Read `docs/ROADMAP.md`.
-4. Read `docs/DECISIONS.md`.
-5. Inspect the current Git status and relevant project files.
-6. Identify the requested milestone and work only inside that milestone unless a prerequisite fix is required.
+2. Read `docs/GAME_DESIGN.md` — **especially §7A, §8A, §10 and §11**, which carry the approved M4
+   match architecture. §7, §8 and part of §11 preserve older M3-era text and are explicitly marked
+   as superseded; do not follow them for M4 work.
+3. Read `docs/ROADMAP.md` — the M4 section is a **phase of seven stages**, not one milestone.
+4. Read `docs/plans/M04_0_MATCH_SHAPE_DESIGN.md` — **the authority for the whole M4 phase.**
+5. Read `docs/DECISIONS.md`, at minimum the 2026-09-12 M4-0 entries at the end of the file.
+6. Inspect the current Git status and relevant project files.
+7. Identify the requested milestone and work only inside that milestone unless a prerequisite fix is required.
+
+Those five documents together are sufficient to understand the current M4 architecture without any
+prior conversation.
 
 If documents disagree, prefer the newest explicit decision in `docs/DECISIONS.md`, then `docs/GAME_DESIGN.md`, then `docs/ROADMAP.md`.
 
@@ -50,7 +56,19 @@ Milestone 3-1 — Four-Player Foundation: COMPLETE / ACCEPTED (2026-09-09). Mile
 - **The accepted M3-2 match loop:** `SETUP → UNLOCKING → OPEN → SEEK_RELIC → COLLECTION → RESULTS → REMATCH`. 10s is the accepted setup-duration baseline for the current no-powers game (15s/25s remain as debug options, not deleted; ~25s stays the M4 direction once powers exist). Bots switch `ROAM → SEEK_RELIC` at OPEN via `BotBrain.Goal` and converge on the Relic using accepted M3-1 navigation; `scripts/match_telemetry.gd` is permanent dev-only, print-based convergence/fairness telemetry.
 - **Arena 01's roof/east-wall pre-positioning is ACCEPTED as an emergent strategy, not a defect** — a player who legally pre-positions on the vault header/roof before OPEN can fall directly onto the Relic. Not fixed in M3-2; recorded as an M4 counterplay hypothesis (Push/Freeze/projectiles/respawn) to be human-playtested, not assumed solved. See `docs/DECISIONS.md` (2026-09-12).
 - Full record: `docs/plans/M03_CORE_GAME_LOOP.md` (§0.5–§0.8), `docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md` (§21 close-out), and the M3-1/M3-2 entries in `docs/DECISIONS.md` (2026-09-06 through 2026-09-12).
-- **The Game Director's "Future match structure" vision** (an escalating ~2-minute match with in-match power progression, recorded in `docs/GAME_DESIGN.md` §25 and `docs/DECISIONS.md`, 2026-09-12) is a hypothesis for M4+, not implemented. **M4 must not be treated as simply "implement Push, Freeze, Shield and shooting"** — a dedicated match-economy design/planning session is required before M4 implementation begins.
+- **What the game currently IMPLEMENTS is the M3 loop** — `SETUP → UNLOCKING → OPEN → SEEK_RELIC → COLLECTION → RESULTS → REMATCH`, with first-touch-wins. **That is no longer the intended final match.** The approved M4 direction (`docs/plans/M04_0_MATCH_SHAPE_DESIGN.md`, approved 2026-09-12) replaces it with an escalating `BUILD → ESCALATE → CLIMAX` match ending in carry-to-a-locked-extraction. Approved, designed, **not implemented** — see the Milestone 4 section below.
+
+## Milestone 4 — Powers, Match Shape & Bot Intelligence
+**M4-0 — Match Shape Design: COMPLETE / APPROVED (2026-09-12). M4-1 onward: NOT STARTED.**
+- **Authority: `docs/plans/M04_0_MATCH_SHAPE_DESIGN.md`.** M4 is a phase of seven stages, not one milestone: M4-0 design (done) · M4-1 Contact · M4-2 The Arena Bites · M4-3 The Climax · M4-4 The Long Match · GATE progression judgment · M4-5 Broader Power Set · M4-6 Economy (conditional).
+- **The approved match:** `BUILD → ESCALATE → CLIMAX`. Grab the Relic, then carry it to an extraction that is selected **once per round** at first pickup (five authored region anchors, maximum region-distance from the first carrier, deterministic tie-break) and then **locked for the round** — it never recalculates on carrier defeat, Relic drop, ownership change or respawn.
+- **Powers are one-use / carry-one.** M4-1's approved set is **Push (control, 0 damage) + Rocket (direct damage) + Freeze (denial, 0 damage)**. Mine → M4-3, Shield/Teleport/Mobility → M4-5.
+- **Health is three coarse pips** (`Healthy → Hurt → Critical → Defeated`), never a percentage bar; the visual treatment is chosen at M4-1 STOP 3, not before. **Health never prescribes behaviour** — no low-health retreat, for humans or bots.
+- **Unlimited respawns with cost, not limited lives.** On defeat the carried power spills as a contestable pickup; a defeated carrier also drops the Relic.
+- **"You feed them to the arena" is an aspiration, not a proven rule** — M4-2 must establish how important environmental damage actually becomes. Do not encode "the arena is the primary damage source."
+- **Open by design, do not default:** all timings · timeout resolution (a hard-cap/sudden-death rule was proposed and explicitly withdrawn) · the health visual treatment · the value of environmental damage · whether stat progression is ever needed.
+- **Nothing in M4 is implemented.** No pickups, powers, health, defeat, respawn, hazards, carry or extraction code exists.
+
 
 ## Core Product Principle
 Do not build the beautiful game first. Build the smallest ugly playable game that proves the mechanic is fun.
@@ -76,7 +94,9 @@ Do not:
 - Add features outside the active milestone.
 - Introduce 3D gameplay, scrolling cameras, traditional platformer complexity, large ability bars, accounts, backend, networking, monetization, cosmetics or production art before their roadmap stage.
 - Extend the jump beyond its approved shape (no double jump, wall jump, charged/variable jump) without explicit approval.
-- Turn Rushlings into a combat/shooter/MOBA.
+- Turn Rushlings into a combat/shooter/MOBA. Health, defeat and Rocket exist as of M4-0, but the
+  game stays a social interference racer: no basic attack, no aiming input, no ability toolbar, no
+  general projectile/combat *model*, no damage numbers. Rocket is a single facing-direction power.
 - Optimize prematurely.
 - add third-party dependencies without explaining why and receiving approval if they materially affect the project.
 - commit/push temporary experiments unless the Game Director accepts them.
@@ -96,17 +116,40 @@ These are intentionally hard constraints unless explicitly revisited:
 - Vertical traversal is also contextual: ladders, lifts, launch pads, portals, drop zones, etc. These are stronger than a jump and reach places a jump cannot.
 - The arena wraps horizontally: leaving one side re-enters from the other at the same height (accepted at M1).
 - Movement numbers are tuning data, not settled design. The movement *model* is what is settled.
-- Projectile/shooting-style interaction is not a movement concern. It is evaluated at M4 through the powers (Freeze, Push, Teleport, Shield), never by turning a movement milestone into combat development.
-- One power can be carried at a time.
-- Initial powers: Freeze, Push, Teleport, Shield.
+- Projectile/shooting-style interaction is not a movement concern. It is evaluated through the M4 powers, never by turning a movement milestone into combat development. **As of M4-0 there is still no general projectile/combat model** — Rocket is a single facing-direction damage power with no aiming input.
+- One power can be carried at a time. **As of M4-0 it is also one-use:** one carried active power →
+  one use → empty → collect again. Scarcity, not a cooldown, throttles combat.
 - Players collect a power by touching the pickup.
-- Baseline mode has no elimination/ghost system. Hazards cause short respawn.
+- **M4-1's approved power set is Push + Rocket + Freeze.** Mine → M4-3; Shield, Teleport and
+  Mobility → M4-5. The old "Freeze, Push, Teleport, Shield" list is superseded as an *ordering*.
+- **Control powers deal no damage; damage powers do.** Push = 0, Freeze = 0, Rocket = 1. Falling = 0
+  (fall damage would retune closed M1 movement). Every damage instance is exactly 1 pip.
+- **Health exists as of the M4 direction: three coarse states** — `Healthy → Hurt → Critical →
+  Defeated`. **Never a percentage bar.** The visual treatment is deliberately unchosen and is
+  selected by M4-1 STOP 3.
+- **Health never prescribes behaviour.** No "low health → retreat/hide" rule, for humans or bots. The
+  only state that changes what a player can do is `Defeated` at zero. **Never add automatic
+  low-health retreat to bots.**
+- **Defeat and respawn are intended** — this supersedes the old "baseline mode has no elimination"
+  guardrail. **Unlimited respawns with cost, never limited lives**: nobody sits watching a match. On
+  defeat the carried power spills as a contestable world pickup; a defeated carrier also drops the
+  Relic. Respawn placement stays minimal — the existing authored anchor furthest from the nearest
+  living opponent. Do not build a spawn director.
 - Ghost gameplay is reserved as a possible future mode.
-- The baseline objective is simple: be the first to grab the Relic.
-- Relic is unavailable/locked at match start, then opens automatically after a short setup period (accepted M3-2 baseline: 10 seconds, for the current no-powers game; 15s/25s remain as debug options; ~25s stays the M4 direction once powers exist).
-- No multi-seal unlocking system in baseline mode.
-- No “hold Relic for 10 seconds” requirement in baseline mode.
-- Maximum round target is around 2 minutes, but a round may end earlier.
+- **The objective is: grab the Relic, then carry it to the activated extraction.** First-touch-wins
+  is the M3-era behaviour the game currently implements, and is **not** the intended final objective.
+- **The extraction is selected exactly once per round**, on the first Relic pickup, from five
+  authored region anchors at maximum region-distance from the first carrier — then **locked for the
+  round.** It must never recalculate on carrier defeat, Relic drop, ownership change or respawn.
+- Relic is unavailable/locked at match start, then opens automatically after a setup period.
+- No multi-seal unlocking system.
+- No "hold Relic for 10 seconds" requirement — the carry to extraction replaces it.
+- Maximum round target is around 2 minutes, but a round may end earlier. **What happens at the time
+  limit is an OPEN question** — a hard-cap/sudden-death rule was proposed at M4-0 and explicitly
+  withdrawn. Do not default to one; M4-4 resolves it with evidence.
+- **"You don't kill your friends, you feed them to the arena" is a design aspiration, not a proven
+  rule.** The arena is *intended to become* a major source and amplifier of danger; **do not encode
+  "the arena is the primary damage source"** — M4-2 must prove it.
 - Immediate rematch is strategically important.
 
 ## Visual Direction
@@ -223,8 +266,29 @@ It is done when:
 6. A Git checkpoint is created/pushed when requested.
 
 ## Immediate Next Milestone
-Milestone 3 — Core Game Loop (both M3-1 and M3-2) is **COMPLETE / ACCEPTED**. The next milestone per `docs/ROADMAP.md` is **Milestone 4 — Powers & Bot Intelligence**, **not started**.
-**Do not implement M4 automatically just because this file is read, and do not treat M4 as simply "implement Push, Freeze, Shield and shooting."** Per the Game Director's own direction (`docs/DECISIONS.md`, 2026-09-12; hypothesis detail in `docs/GAME_DESIGN.md` §25), a dedicated match-economy design/planning session must happen **before** any M4 power implementation begins — covering what players collect, how powers are acquired/leveled, scarcity, death/respawn, the shooting/projectile model, escalation over match time, and how bots should reason about collecting vs. fighting vs. the objective. First read `docs/ROADMAP.md`'s M4 section, `docs/GAME_DESIGN.md` §25, and the 2026-09-12 entries in `docs/DECISIONS.md`; inspect the project; then plan that design session with the Game Director before writing any M4 gameplay code.
+**Milestone 3 — Core Game Loop: COMPLETE / ACCEPTED.**
+**M4-0 — Match Shape Design: COMPLETE / APPROVED (2026-09-12).**
+**M4-1 — Contact: PLANNED / NOT STARTED.** No M4 gameplay code, scene, tool or project setting
+exists.
+
+The dedicated match-economy design session that earlier versions of this file demanded **has
+happened**. Its output is `docs/plans/M04_0_MATCH_SHAPE_DESIGN.md`, which is **the authority for the
+M4 phase** and supersedes the old "M4 = Push, Freeze, Teleport, Shield" scope entirely. **M4 is a
+phase of seven stages, not one milestone:** M4-0 design (done) · M4-1 Contact · M4-2 The Arena Bites
+· M4-3 The Climax · M4-4 The Long Match · GATE progression judgment · M4-5 Broader Power Set · M4-6
+Economy (conditional).
+
+**Do not implement M4-1 automatically just because this file is read.** The next implementation
+stage is M4-1 — Contact, whose scope, out-of-scope list and five STOP points are fixed in
+`docs/plans/M04_0_MATCH_SHAPE_DESIGN.md` §08 and summarised in `docs/ROADMAP.md`. Read that document
+before planning or writing any M4 code, and confirm the milestone with the Game Director first.
+
+**Do not close open questions by assumption.** These are deliberately unresolved and must be settled
+by evidence, not by a future session picking a default: all phase timings and total match duration ·
+**timeout resolution** (a hard-cap/sudden-death rule was proposed and explicitly withdrawn) · the
+health visual treatment (M4-1 STOP 3) · how important environmental damage should become (M4-2) ·
+whether stat progression is needed at all (the GATE after M4-4) · pickup density and respawn interval
+· whether the post-respawn protection window becomes permanent.
 
 ## Documentation Deliverables
 Milestone plans, audits and reports are written into `docs/` — for milestone work, `docs/plans/` — as a Markdown file (the version a future session reads) and, when the Game Director wants a review copy, an accompanying Word `.docx`. Do not deliver plans as external links; the repository must stay self-sufficient. If both formats exist for one document, the Markdown is authoritative. Note `python-docx` is not installed globally on this machine — install it into the session scratchpad to generate a `.docx`.

@@ -413,62 +413,161 @@ slot-specific balancing are authorised.
   patched, per the standing rule against silently changing M3-1 navigation/geometry.
 - **`tools/arena_check.gd` remains a clean PASS**, unchanged from the M2/M3-1 baseline.
 
-**MILESTONE 3 — CORE GAME LOOP: COMPLETE.** Next milestone per this roadmap: **M4 — Powers & Bot
-Intelligence**, not started. Per the Game Director's direction (see `docs/DECISIONS.md`'s "Future
-match structure" entry and `docs/GAME_DESIGN.md`'s corresponding future-direction section), M4
-implementation must be preceded by a dedicated match-economy design/planning milestone before any
-power is built.
+**MILESTONE 3 — CORE GAME LOOP: COMPLETE.** The dedicated match-economy design session this
+close-out demanded has since happened: **M4-0 — Match Shape Design is COMPLETE / APPROVED
+(2026-09-12)**, recorded in `docs/plans/M04_0_MATCH_SHAPE_DESIGN.md`. The next *implementation*
+stage is **M4-1 — Contact**, planned and not started. See the M4 section above.
 
 ## Critical Decision Gate
 If the game is not fun as shapes, do not proceed directly to art. Diagnose movement, arena and objective first.
 
 ---
 
-# M4 — Powers & Bot Intelligence
-**Status: [ ] NOT STARTED.** Next milestone after M3's close-out (2026-09-12) — recorded here per
-the roadmap, not begun.
+# M4 — Powers, Match Shape & Bot Intelligence
 
-**⚠️ Before any implementation:** the Game Director's "Future match structure" direction
-(`docs/DECISIONS.md`, 2026-09-12; hypothesis detail in `docs/GAME_DESIGN.md`) means M4 must not be
-treated as simply "implement Push, Freeze, Shield and shooting." A dedicated match-economy
-design/planning session — covering what players collect, how powers are acquired and leveled,
-scarcity, death/respawn, the shooting/projectile model, escalation over match time, and how bots
-reason about collecting vs. fighting vs. the objective — must happen **before** power
-implementation begins. Nothing below has been re-planned against that direction yet.
+**M4 is a PHASE, not a single milestone.** It has seven stages. Treating it as one milestone will
+produce schedule surprise.
 
-## Risk Being Tested
-Does interference create the social/chaotic fun Rushlings needs without becoming confusing?
+**M4-0 — Match Shape Design: [x] COMPLETE / APPROVED (2026-09-12).**
+**M4-1 — Contact: [ ] PLANNED / NOT STARTED.** No M4 gameplay code, scene, tool or project setting
+exists.
 
-## Scope
-Implement one at a time:
-1. Push.
-2. Freeze.
-3. Teleport.
-4. Shield.
+## Authority
+**`docs/plans/M04_0_MATCH_SHAPE_DESIGN.md` is the authority for this phase** and supersedes any
+older M4 text. Read it before planning or implementing any stage. It replaced the previous M4 scope
+entirely — see "What changed" below.
 
-For every power:
-- Pickup by touching.
-- Carry one power.
-- Clear placeholder visual state.
-- One simple activation input.
-- Clear hit/result.
-- Bots can understand/use it at basic level.
-- Tune before adding next power.
+## What changed, and why the old M4 was replaced
 
-## Recommended Order Rationale
-Push is simplest to understand and immediately tests “mess with your friends.”
-Freeze tests timing.
-Teleport tests route disruption.
-Shield tests defense/counterplay.
+The previous M4 said: implement Push, then Freeze, then Teleport, then Shield, one at a time. That
+ordering was sound; the defect was elsewhere. **There was no match for a power to live inside.**
+M3-2's own telemetry measured median OPEN→win at **~0.00s** — ten seconds of sealed roaming
+followed by a resolution too fast for any interference to change an outcome. Powers built into that
+match would have been individually implemented and collectively unevaluable.
 
-## Acceptance Criteria
-- Each power has a unique purpose.
+M4-0 therefore re-planned the match itself before any power is built, per the requirement recorded
+in `docs/DECISIONS.md` (2026-09-12) and `docs/GAME_DESIGN.md` §25.
+
+**Superseded M3-era assumptions** (preserved in `docs/GAME_DESIGN.md`, marked as superseded rather
+than deleted): first-touch-wins as the *final* objective · "baseline mode should not eliminate
+players" · M4 as simply Push → Freeze → Teleport → Shield.
+
+## The approved match
+
+```
+BUILD       Relic sealed. Tier 1 powers on ordinary routes. Few or no hazards.
+     ↓
+ESCALATE    Tier 2 powers at contested hard-to-reach spots. Danger zones begin.
+     ↓
+CLIMAX      Relic opens. Tier 3 powers. First grab activates and LOCKS one
+            extraction anchor. Carry it there while everyone hunts you.
+     ↓
+WINNER      Extraction reached.
+```
+
+Full detail in `docs/GAME_DESIGN.md` §7A, §8A, §10, §11.
+
+## Stage sequence
+
+| Stage | Status | The one question it answers | Contents |
+|---|---|---|---|
+| **M4-0** Match Shape Design | **[x] COMPLETE / APPROVED** | *What is a Rushlings match?* | The design document. No code. |
+| **M4-1** Contact | **[ ] PLANNED / NOT STARTED** | **Does hurting each other feel good?** | Push + Rocket + Freeze · one-use, carry-one, pickup · 3-pip health · defeat → spill → respawn · minimal safe-respawn · protection-window prototype. **No Relic change, no hazards, no long match.** |
+| **M4-2** The Arena Bites | [ ] Not started | **Does arena-as-opponent improve the game?** | Escalating danger zones with a mandatory warning → active → safe cycle. First real test of Push-is-displacement-only. Determines how important environmental damage should become. |
+| **M4-3** The Climax | [ ] Not started | **Does carry-to-locked-extraction produce a great ending?** | Relic carry · five authored region anchors · selected once and locked for the round · drop-on-defeat · **Mine**. |
+| **M4-4** The Long Match | [ ] Not started | **Does ~2 minutes hold attention?** | BUILD → ESCALATE → CLIMAX phase clock · Tier 1/2/3 access schedule · hazard escalation schedule · real timing measurement · **resolves the open timeout question**. |
+| **GATE** Progression judgment | [ ] Not started | *Is access escalation enough?* | Decide from human evidence whether stat progression is needed at all. |
+| **M4-5** Broader Power Set | [ ] Not started | *Do the categories stay distinct at scale?* | Shield, Teleport, Mobility. Conditional on M4-1 succeeding. |
+| **M4-6** Economy | [ ] Not started | *Only if the GATE says yes* | Resources, levels, charges. Designed against evidence, never imagination. |
+
+**Why hazards come before the climax:** Push has no lethal identity until something exists to push
+people into. Testing the climax first would judge a version of combat that is not the intended
+shipping version. The cost is that there is no complete playable game until M4-3.
+
+## M4-1 — the only stage currently scoped
+
+### Risk Being Tested
+Does player-to-player interference create the social/chaotic fun Rushlings needs, without becoming
+confusing?
+
+### Approved power set
+| Power | Category | Damage | Skill it tests |
+|---|---|---|---|
+| **Push** | Control / displacement | **0** | Positional and environmental manipulation |
+| **Rocket** | Direct ranged damage | 1 | Ranged pressure and firing lines |
+| **Freeze** | Movement / control denial | **0** | Timing and denial |
+
+**Mine is deferred to M4-3**, where the locked extraction creates predictable routes and makes
+placement and prediction meaningful. **Shield is deferred to M4-5**, when enough threat density
+exists to properly evaluate defense. Full reasoning: `docs/plans/M04_0_MATCH_SHAPE_DESIGN.md` §06.
+
+### In scope
+- Power pickup entity: touch to collect, carry one, replaces current.
+- One-use consumption: use → empty → collect again.
+- 3-pip health, with the visual treatment chosen at STOP 3, never before.
+- Defeat → carried power spills as a world pickup → respawn at the anchor furthest from the nearest
+  living opponent.
+- Post-respawn protection window (~0.75–1.0s), flagged a prototype hypothesis.
+- Bot goals at the existing `_decide_next()` seam: `SEEK_PICKUP`, `USE_POWER`, plus passive
+  defeated/respawn handling. **No health-driven bot behaviour of any kind.**
+- Extended roam phase so interference has room to occur.
+- Test-harness knobs: pickup density, debug damage key.
+
+### Explicitly out of scope for M4-1
+Relic carry / extraction anchors (M4-3) · arena hazards (M4-2) · phase clock, tier gating, the
+~2-minute match (M4-4) · Mine (M4-3) · Shield / Teleport / Mobility (M4-5) · inventory, XP,
+currency, stat progression (M4-6 at the earliest, conditional) · impact and fall damage · timeout
+resolution · **any low-health behaviour for humans or bots** · a weighted spawn director · carrier
+speed modification · player↔player collision (stays OFF) · any change to M1 movement, M2 geometry
+or M3 navigation.
+
+### STOP points
+M4-1 is one coherent milestone with internal human gates.
+
+| STOP | Question |
+|---|---|
+| **1** Pickup + scarcity | Does touch-to-collect, carry-one, replacement and one-use consumption read correctly? |
+| **2** Interference | Do Push, Rocket and Freeze work and feel meaningfully different? |
+| **3** Health readability | Can Healthy / Hurt / Critical be understood at normal arena scale? **This STOP selects the visual treatment.** |
+| **4** Defeat / spill / respawn | Does defeat have consequence without being frustrating? Is the spilled power understandable and contestable? Does respawn work? |
+| **5** Human acceptance | Does player-to-player interference actually make Rushlings more fun? |
+
+### Acceptance Criteria
+- Each power has a unique purpose; control and damage identities stay distinct.
 - No power requires a tutorial paragraph.
-- One power at a time is clear.
+- One power at a time is clear; empty-after-use is legible.
+- Health state is readable at full-arena scale without a percentage bar.
+- Defeat has consequence without frustration; spilled power is contestable.
 - Effects do not permanently lock a player out.
-- Bots use powers without obviously self-sabotaging most of the time.
-- Relic race remains primary objective; combat does not take over.
+- Bots use powers without obviously self-sabotaging most of the time, and **never retreat because
+  of low health**.
+- `tools/arena_check.gd` and `tools/m3_check.gd` both still pass. The four known deferred
+  `m3_check.gd` edge-sampling findings remain acknowledged, not silently patched.
 - Remove or redesign any power that reduces fun.
+
+## Open questions this phase must answer with evidence, not argument
+- All phase timings and total match duration.
+- **Timeout resolution** — what happens at the time limit. A hard-cap/sudden-death rule was
+  proposed at M4-0 and **explicitly withdrawn**. Candidates recorded without selection: current
+  carrier wins · overtime · extraction stays active while arena pressure escalates · another
+  sudden-death structure · another evidence-driven solution. Resolved at M4-4.
+- The health visual treatment (M4-1 STOP 3).
+- How important environmental damage should actually become (M4-2).
+- Whether stat progression is needed at all (the GATE, after M4-4).
+- Pickup density and respawn interval.
+- Whether the post-respawn protection window becomes permanent.
+
+## Known risks
+1. **Readability is the binding constraint, not code** — four tiny characters, health states,
+   carried-power indicators, three tiers of pickups, hazard zones, a carried Relic and an
+   extraction beacon on one fixed screen. Expect a milestone spent on readability alone.
+2. **Bot cost is the largest hidden number** — hazard avoidance is the expensive addition.
+   Navigation alone took two milestones and ~39K of `scripts/bot_brain.gd`.
+3. **The stalemate case** — a carrier repeatedly defeated near extraction. No approved rule
+   resolves it yet, because timeout resolution is open.
+4. **Rocket cannot test aim** without an aiming input, which the control guardrail forbids and M5
+   has not solved. It fires in facing direction and tests ranged pressure, not aim.
+5. **Danger zones may read as arbitrary punishment** in greybox. Wind is the fallback.
 
 ---
 
@@ -723,9 +822,11 @@ Not baseline commitments:
   modeling → learned/trained bots). Full four-stage direction recorded in `docs/GAME_DESIGN.md`
   under "Future Direction — Human-Learned Bot Intelligence." Does not change the current
   hand-authored, deterministic bot baseline.
-- Arena-reactive powers (e.g. Freeze affecting floors/ladders, not just players) and the
-  broader "arena as part of the power system" hypothesis. Recorded in `docs/GAME_DESIGN.md`
-  near §10 (Powers). Not approved behavior — to be prototyped and playtested at the powers
-  milestone (M4), not implemented now.
+- Arena-reactive powers (e.g. Freeze affecting floors/ladders, not just players). Recorded in
+  `docs/GAME_DESIGN.md` near §10. Still not approved behaviour, and **not part of M4-1** — M4-1's
+  Freeze is player-targeted movement denial only. The broader "arena as part of the power system"
+  hypothesis is partly addressed from the other direction by M4-2's arena-as-opponent experiment,
+  which makes the arena a threat rather than a power target. Revisit arena-*targeting* powers after
+  M4-2 provides evidence.
 
 These require separate validation and should not leak into early milestones.
