@@ -1,6 +1,8 @@
 # M3-2 — Core Match Loop
 
-**Status: PLAN APPROVED (2026-09-09) by the Game Director. IMPLEMENTATION NOT STARTED.**
+**Status: COMPLETE / ACCEPTED (2026-09-12) by the Game Director.** Final human playtest passed —
+see §21 for the full close-out. Kept below exactly as approved and implemented, as the historical
+planning record.
 
 Approved as the implementation direction, with **one revision** to the CLOSED / UNLOCKING / OPEN
 gate treatment (§05). This document is the authority for M3-2 and **supersedes Part Two (§11) of
@@ -11,10 +13,9 @@ The original Part Two text is deliberately preserved there as history.
 document for review. If the two ever disagree, **this markdown file wins**; it is the one a fresh
 Claude session reads.
 
-> ### ⛔ Nothing in this plan is implemented.
-> No gameplay code, scene, script, test or project setting has been created or modified for M3-2.
-> A fresh implementation session begins at **Step 0** (§19) and stops at **STOP 1** for the
-> Director's visual inspection of the gate before anything else is built.
+> ### ✅ Implemented and accepted — see §21.
+> All five STOP points were reached and approved. The accepted loop is
+> `SETUP → UNLOCKING → OPEN → SEEK_RELIC → COLLECTION → RESULTS → REMATCH`.
 
 ---
 
@@ -842,3 +843,98 @@ M3-2 will make bots use the vault far more heavily than roaming ever did, and th
 navigation weakness that has never been under this kind of load. **If that happens it is identified
 and reported as its own separate finding** — an M3-1 regression with its own evidence — and not
 folded silently into M3-2's scope.
+
+---
+
+## 21. Close-out (2026-09-12) — ACCEPTED
+
+All seven implementation steps (§19) were completed and all five STOP points were reached and
+approved by the Game Director. **The accepted loop:**
+
+```
+SETUP → UNLOCKING → OPEN → SEEK_RELIC → COLLECTION → RESULTS → REMATCH
+```
+
+### What shipped, by step
+
+- **Steps 1–3** (gate, MatchDirector/timer/HUD, Relic/winner/RESULTS/rematch) — built and STOP
+  1/2/3-approved in an earlier session.
+- **Step 4 — bot goal switch.** `BotBrain.Goal` (`ROAM`/`SEEK_RELIC`), orthogonal to `State`/`Mode`.
+  `notify_open()` records the request; each brain's own `_check_goal_switch()` cancels its current
+  executor/path/target on the first ROAM tick where its staggered reaction delay (0.15/0.30/0.45s)
+  has elapsed **and** it is grounded on a valid graph node, capped at 1.2s (cancel anyway past the
+  cap and let the stall ladder/RECOVER handle it — no special-casing for mid-transit states, per
+  §08). `_pick_target_for_mode()` returns the constant `"VaultFloor"` whenever `goal == SEEK_RELIC`,
+  overriding ROAM/NAV_STRESS_TEST target selection. `_final_approach_relic()` replaces intra-node
+  wander with a wrap-aware walk to the Relic's real x once at `VaultFloor`. No teleporting, no
+  position writes — verified by a per-tick displacement check across walk/jump/drop/ladder/launch/
+  airborne/idle scenarios (test 18, all 8 scenarios passed).
+- **Step 5 — telemetry and fairness report.** `scripts/match_telemetry.gd`, a dev-only print-based
+  node wired into the live scene: per-slot snapshot at OPEN (node, region, neutral route cost,
+  wrap-aware distance to Relic, seal-standing flag) and per-round results (winner, OPEN→win, door,
+  arrival order, nearest-at-OPEN flag, roof-camp flag). `tools/m3_check.gd` test 20 runs 20 headless
+  bot-only rounds (P1 bot-controlled for this experiment only) and prints the §14 aggregate table.
+
+### Setup duration — ACCEPTED
+
+**10 seconds is the accepted M3-2 baseline** for the current no-powers game. The 15s/25s debug
+options (`debug_setup_15`/`debug_setup_25`) are preserved, not deleted. ~25s remains the M4 working
+direction once powers give the setup phase real content — this is unchanged from §04.
+
+### Arena 01 roof/east-wall pre-positioning — ACCEPTED as emergent strategy, not a defect
+
+Human playtesting confirmed players/bots can legally pre-position on the Relic roof/header/east-
+wall area before OPEN (P3 observed waiting on the roof, P4 around the east wall); when the seal
+opens, a correctly positioned player can fall directly toward the Relic for a very fast collection.
+**This is not fixed in M3-2** — it is recorded as an accepted emergent Arena 01 strategy. Full
+decision, including the M4 counterplay hypothesis (Push/Freeze/projectiles/respawn as future
+natural counters) and the future-arena design principle this motivates, is in `docs/DECISIONS.md`
+(2026-09-12). Do not claim powers have "solved" it until playtested — if roof positioning remains
+dominant after counterplay exists, Arena 01 is revisited then, not before.
+
+### Fairness telemetry — preserved as diagnostic evidence, not acted on
+
+20-round headless bot-only sample: P2 55% wins (flagged, not corrected), median/min/max OPEN→win
+all 0.00s, nearest-at-OPEN win rate 0%, 0 non-terminating rounds, 0 hard recoveries. **Important
+caveat, recorded rather than quietly presented at face value:** tracing the raw run showed the
+near-universal 0.00s figure is largely explained by bots falling through the vault's now-open
+ceiling from roof/header pre-positioning, not by racing through a door — and the telemetry's
+single OPEN-instant position snapshot under-counts this (a body mid-fall through the ceiling reads
+as `node=air, on_seal=false`, not as a roof-camp win), so the reported 10% roof-camp rate is a
+floor, not the true rate. **No spawn, geometry, route cost, or bot-difficulty change was made from
+this sample.** Improve the telemetry's timing resolution before treating fairness as a serious
+tuning task.
+
+### Regressions found and fixed during Step 4/5 validation (harness-only, not gameplay)
+
+Several pre-existing M3-1/Step-1–3 tests used `debug_force_open()` purely to unseal the vault for
+their own purposes; since OPEN now has real behavioural meaning for bots, this incidentally
+hijacked their explicit targets. Fixed by resetting the affected brains back to ROAM immediately
+after forcing the gate (tests 1, 4, 5, 7, 8) and, for test 8 specifically, disabling the always-
+monitoring Relic's `_physics_process` during that test (it isolates raw traversal, not collection,
+and one of its own test bodies walks directly across the Relic's collection zone en route to a
+different target) — the same pattern tests 5/7 already used for the same reason. None of these
+touched gameplay code; all are test-isolation fixes.
+
+### Checker status at acceptance
+
+- `tools/arena_check.gd`: **PASS**, 0 failures, unchanged from the accepted M2/M3-1 baseline (2
+  acknowledged exceptions, both pre-existing and named in the tool itself).
+- `tools/m3_check.gd` (tests 0–20): **4 known, deferred failures**, all the same checker-sampling
+  artifact — `C_Seam→A_E_Bridge`, `A_W_Bridge→Pier`, `VaultFloor→VaultEast`, `VaultEast→A_E`, each
+  failing only at one extreme boundary sample position (out of five) with an implausibly fast
+  ~0.07s "steer" phase suggesting the body starts embedded in/against the wall at that exact
+  sample point. Present before any M3-2 Step 4/5 code was written, unchanged across every run
+  performed, and independent of the goal-switch code path (raw `EdgeExecutor` mechanics, no
+  `BotBrain` involvement) — not fixed, per the standing "do not silently patch M3-1
+  geometry/navigation" rule. Real gameplay evidence (20/20 clean fairness-round terminations, 0
+  hard recoveries) indicates this checker-sampling artifact does not block real play. **Recorded as
+  a deferred finding, not cleared to force an artificial green result.**
+
+### M3 — Core Game Loop: COMPLETE
+
+Both halves accepted. Next milestone per the existing roadmap: **M4 — Powers & Bot Intelligence**,
+not started. Per the Game Director's own direction (see `docs/DECISIONS.md`'s "Future match
+structure" entry, 2026-09-12, and `docs/GAME_DESIGN.md`'s corresponding future-direction section),
+M4 implementation must be preceded by a dedicated match-economy design/planning milestone — M4 is
+not simply "implement Push, Freeze, Shield and shooting."

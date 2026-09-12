@@ -16,9 +16,13 @@ func _action(name: String) -> String:
 	return action_prefix + name
 
 func horizontal() -> float:
+	if frozen:
+		return 0.0
 	return Input.get_axis(_action("move_left"), _action("move_right"))
 
 func vertical() -> float:
+	if frozen:
+		return 0.0
 	var intent := 0.0
 	if Input.is_action_pressed(_action("vertical_intent_up")):
 		intent -= 1.0
@@ -27,6 +31,8 @@ func vertical() -> float:
 	return intent
 
 func jump_pressed(in_traversal_zone: bool) -> bool:
+	if frozen:
+		return false
 	if Input.is_action_just_pressed(_action("jump")):
 		return true
 	# Up doubles as jump, but only away from a ladder - inside a traversal

@@ -19,6 +19,17 @@ var nodes: Array[String] = []
 var edges: Array[Dictionary] = []
 var _adjacency: Dictionary = {}   # node name -> Array[Dictionary] (outgoing edges)
 
+# M3-2 Step 2 (docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md S07): the five edges
+# through the sealed vault volume are authored with {"gated": true} below.
+# Defaults to true (open) so a rig with no MatchDirector - m3_check.gd's
+# _load_rig, the NAV STRESS sequences that visit VaultFloor - behaves exactly
+# as before this flag existed. arena_01.gd sets this to match
+# MatchDirector.state whenever it changes; nothing else may write it.
+var gate_open: bool = true
+
+func set_gate_open(v: bool) -> void:
+	gate_open = v
+
 func _init(p_geometry: ArenaGeometry) -> void:
 	geometry = p_geometry
 	# CoverW removed from Arena 01 (Director decision, human-playtest-driven
@@ -260,7 +271,12 @@ func _build_edges() -> void:
 		_edge("A_W_Bridge", "A_W", "walk", 0.4),
 		_edge("A_W_Bridge", "Pier", "jump", 0.5),
 		_edge("Pier", "A_W_Bridge", "drop", 0.4, {"side": "left"}),
-		_edge("Pier", "VaultFloor", "drop", 0.5, {"side": "right"}),
+		# M3-2 Step 2 (S07): "gated" edges pass through the sealed vault
+		# volume and are unusable to Dijkstra while gate_open is false -
+		# see _weighted_cost in bot_brain.gd and reliable_reachable_from
+		# below. Route class/cost are otherwise unchanged; OPEN restores
+		# them to ordinary RELIABLE edges.
+		_edge("Pier", "VaultFloor", "drop", 0.5, {"side": "right", "gated": true}),
 		# Director decision (2026-09-07): a two-tread staircase replacement
 		# (VaultStepA/VaultStepB) was implemented and tested, then REJECTED
 		# and reverted after human playtest evidence: the Director can
@@ -282,10 +298,10 @@ func _build_edges() -> void:
 		# realistic starting positions (near VaultFloor/VaultFloor_Bridge,
 		# matching where a bot actually lands after entering via Pier) and
 		# succeeded cleanly on both hops every time - promoted to reliable.
-		_edge("VaultFloor", "VaultEast", "jump", 0.5, {"vertical_clear": true}),
-		_edge("VaultEast", "VaultFloor", "drop", 0.4, {"side": "left"}),
-		_edge("VaultEast", "A_E", "jump", 0.5, {"vertical_clear": true}),
-		_edge("A_E", "VaultEast", "drop", 0.4, {"side": "left"}),
+		_edge("VaultFloor", "VaultEast", "jump", 0.5, {"vertical_clear": true, "gated": true}),
+		_edge("VaultEast", "VaultFloor", "drop", 0.4, {"side": "left", "gated": true}),
+		_edge("VaultEast", "A_E", "jump", 0.5, {"vertical_clear": true, "gated": true}),
+		_edge("A_E", "VaultEast", "drop", 0.4, {"side": "left", "gated": true}),
 		_edge("A_E", "A_E_Bridge", "walk", 0.4),
 		_edge("A_E_Bridge", "A_E", "walk", 0.4),
 
@@ -336,6 +352,8 @@ func reliable_reachable_from(start: String) -> Dictionary:
 		var u: String = queue.pop_front()
 		for e in outgoing(u):
 			if e.route_class != RouteClass.RELIABLE:
+				continue
+			if e.get("gated", false) and not gate_open:
 				continue
 			if not visited.has(e.to):
 				visited[e.to] = true

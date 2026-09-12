@@ -48,6 +48,12 @@ const ACKNOWLEDGED_EXCEPTIONS := [
 		"detail_contains": "landing platform 'B_Under' is 140px wide, needs >=280px",
 		"reason": "B_Under is a confirmed intentionally-hard-to-reach, high-value future pickup spot (docs/DECISIONS.md, 2026-09-06). Not to be simplified.",
 	},
+	{
+		"rule": "GATE",
+		"label": "West gateway shaft / VaultSealW",
+		"detail_contains": "platform intersects the west gateway's fall corridor",
+		"reason": "This static AABB check predates M3-2 and cannot see runtime collision toggling - VaultSealW is DESIGNED to occupy this exact corridor while the vault is sealed (docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md S05) and its collision is disabled at OPEN (proven dynamically by the GATE/R8/R9 checks run above, forced OPEN, and by the SEAL section's CLOSED-state proof). Not a bug; the check's job of catching an UNEXPECTED obstruction is unaffected for any other platform.",
+	},
 ]
 
 func _acknowledged_exception(rule: String, label: String, detail: String) -> Dictionary:
@@ -110,15 +116,36 @@ func _run() -> void:
 	print("\n--- R6: seam collision coverage ---")
 	_check_seam_collision()
 
-	print("\n--- Relic chamber gateways ---")
+	# M3-2 Step 2: the scene now loads with MatchDirector in SETUP, i.e. the
+	# vault sealed by default - see docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md
+	# S19 Step 2, item 9 ("make arena_check.gd correctly test both SEALED and
+	# OPEN rather than leaving the legacy OPEN-only tests as expected
+	# failures"). The gateway/R8/R9 checks below predate the gate and were
+	# authored to prove the M2/M3-1 accepted vault traversal - that claim is
+	# only meaningful with the gate OPEN, so it is forced open for exactly
+	# these checks, then re-sealed immediately after. The SEALED-state proof
+	# (nobody can bypass while CLOSED) runs first, against the scene's real
+	# default, no forcing needed.
+	print("\n--- SEAL: M3-2 vault seal (VaultSealW/VaultSealE), SETUP/CLOSED state (scene default) ---")
+	await _check_vault_seal_step1()
+
+	print("\n--- Relic chamber gateways (forced OPEN - the accepted M2/M3-1 baseline) ---")
+	await _set_gate_open(true)
 	_check_gateways()
 	await _check_gateway_routes()
 
-	print("\n--- R8: forgiving objective access (standing start) ---")
+	print("\n--- R8: forgiving objective access (standing start), OPEN state ---")
 	await _check_standing_start_access()
 
-	print("\n--- R9: no trap volumes ---")
+	print("\n--- R9: no trap volumes, OPEN state ---")
 	_check_no_trap_volumes()
+
+	print("\n--- SEAL: re-sealed after the OPEN proof, back to CLOSED for the remaining diagnostics ---")
+	await _set_gate_open(false)
+	if await _test_west_gateway_enter():
+		_report("SEAL", "Re-sealed after OPEN proof (west gateway)", "FAIL", "reached VaultFloor after toggling back to CLOSED - the seal did not re-engage")
+	else:
+		_report("SEAL", "Re-sealed after OPEN proof (west gateway)", "PASS", "blocked again once toggled back CLOSED")
 
 	print("\n--- R10: band continuity (diagnostic only) ---")
 	_band_report("Floor", ["Floor"], true)
@@ -181,6 +208,20 @@ func _load_arena() -> void:
 	# roam independently for the whole run, which does not affect any static
 	# geometry check or Slot1's own route proofs.
 	player = arena.get_node("PlayerSlots/Slot1")
+	# M3-2 Step 3: this checker's own _set_gate_open() drives MatchDirector
+	# directly and explicitly - it must not ALSO advance on its own in the
+	# background. Left enabled, MatchDirector's real ~10s timer eventually
+	# fires OPEN unprompted mid-run, which lets the real Relic (still
+	# ticking) genuinely collect from a bot wandering through the
+	# now-unsealed vault - that latches RESULTS and freezes every
+	# controller, including Slot1's, silently breaking every later
+	# Input-driven test (first observed: the wrap-integrity tests, which
+	# depend on Slot1 actually moving). Relic collection itself is Step 3's
+	# own concern and is tested separately in tools/m3_check.gd - this
+	# checker is geometry/traversal only and must not exercise it as a side
+	# effect of forcing the gate open for its own purposes.
+	arena.get_node("MatchDirector").set_physics_process(false)
+	arena.get_node("Relic").set_physics_process(false)
 
 func _aabb_of(body: Node2D) -> Dictionary:
 	var cs := body.get_node("CollisionShape2D") as CollisionShape2D
@@ -605,6 +646,99 @@ func _test_east_gateway_exit() -> bool:
 		return false
 	_hold(0)
 	return _on_platform("A_E") or _on_platform("A_E_Bridge")
+
+# --- M3-2 Step 1: vault seal (VaultSealW/VaultSealE) -------------------------
+#
+# The GATE/R8/R9 tests above still assume the pre-M3-2 always-open vault and
+# are scheduled for a gate-state-aware rewrite alongside the MatchDirector
+# (docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md S15/S16, "run R1-R12 in both gate
+# states") - they now correctly FAIL on every route that leads into the
+# sealed chamber, which is Step 1's intended effect, not a defect. This
+# section is an additive, temporary Step 1 probe for the two new seal pieces
+# only; it does not relax or replace any existing rule above.
+
+func _check_vault_seal_step1() -> void:
+	var seal_w: Dictionary = geom["VaultSealW"]
+	var gate_w: Dictionary = geom["VaultGateW"]
+	var seal_e: Dictionary = geom["VaultSealE"]
+	var roof_gap := false
+	if seal_w.right < gate_w.left - 0.5:
+		roof_gap = true
+		_report("SEAL", "Roof coverage: VaultSealW -> VaultGateW", "FAIL", "gap of %.1fpx" % (gate_w.left - seal_w.right))
+	if gate_w.right < seal_e.left - 0.5:
+		roof_gap = true
+		_report("SEAL", "Roof coverage: VaultGateW -> VaultSealE", "FAIL", "gap of %.1fpx" % (seal_e.left - gate_w.right))
+	if not roof_gap:
+		_report("SEAL", "Roof coverage (VaultSealW+VaultGateW+VaultSealE)", "PASS", "continuous solid span x %.0f-%.0f, y %.0f-%.0f" % [seal_w.left, seal_e.right, seal_w.top, seal_w.bottom])
+
+	# The interior box the seal caps is [820,1160] x [seal.bottom, floor.top] -
+	# below the seal, above the chamber floor (docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md
+	# S05's ASCII diagram). Each side wall only needs to cover that span, not
+	# the seal's own y-range - the seal itself already covers that overhead.
+	var floor_top: float = geom["VaultFloor"].top
+	var pier: Dictionary = geom["Pier"]
+	if pier.top <= seal_w.bottom and pier.bottom >= floor_top:
+		_report("SEAL", "West wall coverage (Pier east face)", "PASS", "Pier spans y %.0f-%.0f, covers the interior's y %.0f-%.0f" % [pier.top, pier.bottom, seal_w.bottom, floor_top])
+	else:
+		_report("SEAL", "West wall coverage (Pier east face)", "FAIL", "Pier spans y %.0f-%.0f, does not cover the interior's y %.0f-%.0f" % [pier.top, pier.bottom, seal_w.bottom, floor_top])
+
+	var vault_east: Dictionary = geom["VaultEast"]
+	if vault_east.top <= seal_e.bottom and vault_east.bottom >= floor_top:
+		_report("SEAL", "East wall coverage (VaultEast west face)", "PASS", "VaultEast spans y %.0f-%.0f, covers the interior's y %.0f-%.0f" % [vault_east.top, vault_east.bottom, seal_e.bottom, floor_top])
+	else:
+		_report("SEAL", "East wall coverage (VaultEast west face)", "FAIL", "VaultEast spans y %.0f-%.0f, does not cover the interior's y %.0f-%.0f" % [vault_east.top, vault_east.bottom, seal_e.bottom, floor_top])
+
+	await _check_roof_bypass()
+
+# A3's exact named bypass: jump from VaultEast onto the roof (a legal, ordinary
+# M1 jump), then try to walk the whole roof width and confirm no descent into
+# VaultFloor is possible from up there.
+func _check_roof_bypass() -> void:
+	var vault_east: Dictionary = geom["VaultEast"]
+	await _place_player(Vector2(vault_east.center.x, vault_east.top - player_half_h))
+	if not await _run_and_jump_near_edge("VaultEast", -1, 20.0, 200):
+		_report("SEAL", "Roof bypass probe: VaultEast -> roof", "WARN", "could not reach the roof from VaultEast to run this probe - verify by manual STOP 1 inspection instead")
+		return
+	if not await _wait_until(func(): return player.is_on_floor(), 200, "land after jumping from VaultEast"):
+		_report("SEAL", "Roof bypass probe: VaultEast -> roof", "WARN", "never landed after the jump - verify by manual STOP 1 inspection instead")
+		return
+	if not (_on_platform("VaultSealE") or _on_platform("VaultGateW") or _on_platform("VaultSealW")):
+		_report("SEAL", "Roof bypass probe: VaultEast -> roof", "WARN", "landed on '%s' instead of the roof - verify by manual STOP 1 inspection instead" % _current_platform_name())
+		return
+	var reached_vault_floor := false
+	_hold(-1)
+	for _i in range(240):
+		await _tick()
+		if _on_vault_floor():
+			reached_vault_floor = true
+			break
+		if player.global_position.x <= geom["Pier"].right - player_half_w:
+			break
+	_hold(0)
+	if reached_vault_floor:
+		_report("SEAL", "Roof bypass (walk the roof west, watch for a drop into the chamber)", "FAIL", "reached VaultFloor from the roof - the seal has a hole")
+	else:
+		_report("SEAL", "Roof bypass (walk the roof west, watch for a drop into the chamber)", "PASS", "never landed inside the sealed chamber; ended on '%s'" % _current_platform_name())
+
+# M3-2 Step 2: the gate is driven by MatchDirector, which is authoritative
+# (scripts/match_director.gd, scripts/relic_gate.gd). Forcing state through
+# MatchDirector's own debug_force_open()/debug_force_setup() - the same API
+# the G-key debug preview uses - is the same code path a human triggers
+# manually at STOP 1/2. This lets this headless probe assert what STOP 1
+# asked a human to judge by eye: that OPEN genuinely restores the accepted
+# M3-1 vault traversal, not merely that it looks open.
+func _director_node() -> Node:
+	return arena.get_node("MatchDirector")
+
+func _set_gate_open(open: bool) -> void:
+	if open:
+		_director_node().debug_force_open()
+	else:
+		_director_node().debug_force_setup()
+	# CollisionShape2D.disabled is toggled with set_deferred by relic_gate.gd;
+	# let that deferred call land before any physics probe runs.
+	await process_frame
+	await process_frame
 
 func _check_gateway_routes() -> void:
 	if await _test_west_gateway_enter():

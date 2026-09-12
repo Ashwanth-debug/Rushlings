@@ -19,12 +19,16 @@ const TraversalRecorderScript := preload("res://scripts/traversal_recorder.gd")
 
 @onready var _slots_container: Node2D = $PlayerSlots
 @onready var _markers: Node2D = $Markers
+@onready var match_director: MatchDirector = $MatchDirector
+@onready var relic: Area2D = $Relic
+@onready var match_telemetry = $MatchTelemetry
 
 var match_config
 var geometry
 var nav_graph
 var players: Array = []
 var brains: Array = []
+var round_index: int = 0
 
 var labels_visible: bool = true
 var collision_enabled: bool = false
@@ -40,9 +44,21 @@ func _ready() -> void:
 	_wire_bots()
 	set_label_visibility(labels_visible)
 	set_player_collision(collision_enabled)
+	# M3-2 Step 2: nav_graph's vault edges must match MatchDirector's state
+	# from the very first frame (SETUP = sealed), not just on later
+	# transitions - RelicGate handles the gate's own visuals/collision, this
+	# is the bot-routing side of the same state.
+	match_director.state_changed.connect(_on_match_state_changed)
+	_on_match_state_changed(match_director.state)
 	# Dev-only human-traversal recorder (Director request, 2026-09-07): P1
 	# only, toggled with debug_record_traversal - see traversal_recorder.gd.
 	traversal_recorder = TraversalRecorderScript.new(players[0], geometry)
+	# M3-2 Step 5 (S14): dev-only, print-based convergence/fairness telemetry.
+	# match_telemetry.arena is set here rather than passed to a constructor -
+	# MatchTelemetry is a real scene node (its own _ready() already ran and
+	# wired MatchDirector's state_changed signal) so it needs a back-reference
+	# to the arena for players/geometry/nav_graph/brains, not a rebuild.
+	match_telemetry.arena = self
 
 func _spawn_slots() -> void:
 	var spawns: Array = [
@@ -76,11 +92,43 @@ func _wire_bots() -> void:
 			if j != i:
 				other_bodies.append(players[j])
 		var brain = BotBrainScript.new(
-			players[i], geometry, nav_graph, cfg.slot_id, match_config.match_seed,
-			other_bodies, Callable(self, "_on_bot_hard_recovery"), match_config.curiosity_player_prob
+			players[i], geometry, nav_graph, cfg.slot_id, _round_base_seed(),
+			other_bodies, Callable(self, "_on_bot_hard_recovery"), match_config.curiosity_player_prob, relic.global_position.x
 		)
 		brains[i] = brain
 		players[i].controller = BotControllerScript.new(brain)
+
+func _on_match_state_changed(new_state: int) -> void:
+	nav_graph.set_gate_open(new_state == MatchDirector.State.OPEN)
+	# M3-2 Step 3 (approved S12): freeze every controller on RESULTS, and
+	# unfreeze on any transition back to SETUP - whether that transition
+	# came from a full rematch (_full_reset(), which also hands bots brand
+	# new, already-unfrozen controllers) or from a bare debug_setup_10/15/25
+	# key press, which resets MatchDirector alone. Centralising this here
+	# means neither of those call sites has to remember to unfreeze anyone.
+	if new_state == MatchDirector.State.RESULTS:
+		for p in players:
+			p.controller.set_frozen(true)
+	elif new_state == MatchDirector.State.SETUP:
+		for p in players:
+			p.controller.set_frozen(false)
+		# M3-2 Step 4 (S08): a bare debug_setup_10/15/25 key press resets
+		# MatchDirector alone, without rebuilding brains (a real rematch's
+		# _full_reset() already hands every bot a brand-new brain, where
+		# this is a no-op) - a bot must not carry SEEK_RELIC into a
+		# freshly re-sealed vault just because the same brain instance
+		# survived the reset.
+		for i in range(brains.size()):
+			if brains[i] != null:
+				brains[i].reset_goal()
+	elif new_state == MatchDirector.State.OPEN:
+		# M3-2 Step 4 (S08): the single authoritative OPEN goal switch.
+		# Each brain records the request and its own staggered reaction
+		# delay - none of them cancel anything here, see
+		# BotBrain.notify_open()/_check_goal_switch().
+		for i in range(brains.size()):
+			if brains[i] != null:
+				brains[i].notify_open()
 
 func _on_bot_hard_recovery(slot_id: int) -> void:
 	var idx := slot_id - 1
@@ -88,9 +136,61 @@ func _on_bot_hard_recovery(slot_id: int) -> void:
 	if _markers.has_node(spawn_name):
 		players[idx].reset_to(_markers.get_node(spawn_name).global_position)
 
+## Deterministic, non-colliding per-round bot seeds (docs/DECISIONS.md /
+## M03_2_CORE_MATCH_LOOP_PLAN.md S13): match_seed + round_index*101 +
+## slot_index. BotBrain._init() itself adds `+ slot_index` to whatever base
+## seed it's given (see bot_brain.gd), so this returns everything BUT that
+## last term - round_index=0 (the initial match) reduces to exactly
+## match_config.match_seed, unchanged from pre-Step-3 behaviour.
+func _round_base_seed() -> int:
+	return match_config.match_seed + round_index * 101
+
+## Rematch (docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md S13): rebuild the
+## brains, reset the bodies - not a scene reload, not a giant mutable
+## BotBrain.reset(). A fresh BotBrain is, by construction, fully reset (empty
+## path, empty blacklist, stress_index 0, hard_recovery_count 0, ...) so
+## there is nothing to enumerate. Reused for both the real rematch (R during
+## RESULTS) and the debug_setup_10/15/25 keys, so pressing either always
+## leaves bodies/brains/gate/relic/HUD in one consistent state - see
+## docs/DECISIONS.md's "reset_to() traversal-zone ownership" note: reset_to()
+## deliberately does NOT touch in_traversal_zone/climb_top_limit, and this
+## function does not either.
+func _full_reset(new_setup_duration: float = -1.0) -> void:
+	round_index += 1
+	var spawns: Array = [
+		_markers.get_node("Spawn1"), _markers.get_node("Spawn2"),
+		_markers.get_node("Spawn3"), _markers.get_node("Spawn4"),
+	]
+	for i in range(match_config.slots.size()):
+		var cfg = match_config.slots[i]
+		players[i].reset_to(spawns[i].global_position)
+		if cfg.controller_kind == MatchConfigScript.ControllerKind.BOT:
+			var other_bodies: Array = []
+			for j in range(players.size()):
+				if j != i:
+					other_bodies.append(players[j])
+			var brain = BotBrainScript.new(
+				players[i], geometry, nav_graph, cfg.slot_id, _round_base_seed(),
+				other_bodies, Callable(self, "_on_bot_hard_recovery"), match_config.curiosity_player_prob, relic.global_position.x
+			)
+			brain.set_mode(nav_mode)
+			brains[i] = brain
+			players[i].controller = BotControllerScript.new(brain)
+	match_director.reset_round(new_setup_duration)
+
 func _process(_delta: float) -> void:
 	if Input.is_action_just_pressed("debug_reset"):
-		players[0].reset_to(_markers.get_node("Spawn1").global_position)
+		# M3-2 Step 3: same physical key (R) doubles as the approved rematch
+		# input while RESULTS is showing (matching the "[R] REMATCH" HUD
+		# prompt) - RESULTS ignores it until match_director.rematch_ready(),
+		# the approved ~1.2s minimum dwell. Outside RESULTS, unchanged M1/M2
+		# behaviour: reset P1 to spawn.
+		if match_director.state == MatchDirector.State.RESULTS:
+			if match_director.rematch_ready():
+				_full_reset()
+				print("Arena01: rematch - round %d" % round_index)
+		else:
+			players[0].reset_to(_markers.get_node("Spawn1").global_position)
 	if Input.is_action_just_pressed("debug_toggle_labels"):
 		labels_visible = not labels_visible
 		set_label_visibility(labels_visible)
@@ -109,6 +209,29 @@ func _process(_delta: float) -> void:
 		traversal_recorder.toggle()
 	if Input.is_action_just_pressed("debug_restart_nav_stress"):
 		restart_nav_stress()
+	if Input.is_action_just_pressed("debug_toggle_gate") and match_director.state != MatchDirector.State.RESULTS:
+		# M3-2 Step 2 (STOP 2 inspection): force straight to OPEN, or back to
+		# a fresh SETUP - both go through MatchDirector.debug_force_*, so the
+		# director (and everything driven off it: the gate, the HUD, the nav
+		# graph) stays authoritative and cannot be left in a mixed state.
+		# Excluded from RESULTS (Step 3): forcing OPEN from there would skip
+		# the frozen->unfrozen transition, which only happens on SETUP -
+		# press R (rematch) to leave RESULTS instead.
+		if match_director.state == MatchDirector.State.OPEN:
+			match_director.debug_force_setup()
+			print("Arena01: MatchDirector forced to SETUP")
+		else:
+			match_director.debug_force_open()
+			print("Arena01: MatchDirector forced to OPEN")
+	if Input.is_action_just_pressed("debug_setup_10"):
+		match_director.reset_round(10.0)
+		print("Arena01: setup_duration = 10.0, round reset")
+	if Input.is_action_just_pressed("debug_setup_15"):
+		match_director.reset_round(15.0)
+		print("Arena01: setup_duration = 15.0, round reset")
+	if Input.is_action_just_pressed("debug_setup_25"):
+		match_director.reset_round(25.0)
+		print("Arena01: setup_duration = 25.0, round reset")
 	if nav_mode == BotBrainScript.Mode.NAV_STRESS_TEST:
 		_update_stress_labels()
 

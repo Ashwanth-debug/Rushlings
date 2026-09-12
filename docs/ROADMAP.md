@@ -232,15 +232,17 @@ Bots, powers, win condition, production art, online multiplayer.
 ---
 
 # M3 — Core Game Loop
-**Status: [~] IN PROGRESS — M3-1 (Four-player foundation) is [x] COMPLETE / ACCEPTED
-(2026-09-09). M3-2 (Core match loop) is [ ] PLAN APPROVED (2026-09-09) / IMPLEMENTATION NOT
-STARTED.** See `docs/plans/M03_CORE_GAME_LOOP.md` §0.5–§0.7 and the 2026-09-06 through 2026-09-09
-entries in `docs/DECISIONS.md` for the full implementation, diagnostic, and playtest log.
+**Status: [x] COMPLETE — M3-1 (Four-player foundation) is COMPLETE / ACCEPTED (2026-09-09). M3-2
+(Core match loop) is COMPLETE / ACCEPTED (2026-09-12). MILESTONE 3 — CORE GAME LOOP: COMPLETE.**
+See `docs/plans/M03_CORE_GAME_LOOP.md` §0.5–§0.8, `docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md` §21,
+and the 2026-09-06 through 2026-09-12 entries in `docs/DECISIONS.md` for the full implementation,
+diagnostic, and playtest log.
 
-**⚠️ M3-2 implementation brief: `docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md`.** That document is the
-authority for M3-2 and supersedes Part Two (§11) of `M03_CORE_GAME_LOOP.md` wherever they differ.
-**No M3-2 gameplay code, scene, script, test or project setting exists yet.** A fresh session
-starts at its Step 0 and stops at **STOP 1** for Director inspection of the gate.
+**M3-2 implementation brief: `docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md`.** That document is the
+authority for M3-2 and superseded Part Two (§11) of `M03_CORE_GAME_LOOP.md` wherever they differed.
+**Accepted loop:** `SETUP → UNLOCKING → OPEN → SEEK_RELIC → COLLECTION → RESULTS → REMATCH`. Final
+human playtest confirmed every stage reads clearly, bots visibly switch ROAM→SEEK_RELIC at OPEN
+and converge using the accepted M3-1 navigation, and rematch reliably starts fresh rounds.
 
 **M3-1 close-out, for a session that hasn't read the whole log:** the vault exit, the traversal-
 audit topology fixes (three missing mandatory edges, explicit drop departure sides), a genuinely
@@ -351,11 +353,12 @@ fixed-screen arena?** The Relic loop is deliberately not the first thing tested.
 - `tools/m3_check.gd` (including its NAV STRESS mode and the ad hoc 5-minute soak variant) is
   permanent development/regression tooling from here on, alongside `tools/arena_check.gd`.
 
-## M3-2 — Plan approved 2026-09-09, implementation NOT started
+## M3-2 — COMPLETE / ACCEPTED (2026-09-12)
 
-**Full plan: `docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md`.** Approved as the implementation
-direction with one revision to the gate treatment. Decision entries: `docs/DECISIONS.md`,
-2026-09-09.
+**Full plan and close-out: `docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md`** (§21 is the close-out).
+Approved as the implementation direction with one revision to the gate treatment, then implemented
+across Steps 1–5 and accepted after final human playtest. Decision entries: `docs/DECISIONS.md`,
+2026-09-09 through 2026-09-12.
 
 **Approved architecture:** SETUP → UNLOCKING → OPEN → RESULTS on one `delta`-driven
 `MatchDirector` · `reset_round()` as a function, not a fifth state · plain M3-1 ROAM during SETUP ·
@@ -380,13 +383,58 @@ and take a real engine door-arrival measurement before choosing the human-playte
 network. Measurement finding only — no spawn moves, geometry changes, route re-costing or
 slot-specific balancing are authorised.
 
+## M3-2 Closeout — DONE (2026-09-12)
+
+- **Accepted** after final human playtest: the full `SETUP → UNLOCKING → OPEN → SEEK_RELIC →
+  COLLECTION → RESULTS → REMATCH` loop reads clearly end to end, bots visibly switch to
+  SEEK_RELIC at OPEN and converge, human and bots collect the same Relic, RESULTS freezes
+  correctly, and repeated rematches work.
+- **10s is the accepted setup-duration baseline** for the current no-powers game. 15s/25s debug
+  options are preserved (not deleted); ~25s remains the M4 working direction once powers exist.
+- **Arena 01's roof/east-wall pre-positioning is accepted as an emergent strategy**, not fixed in
+  M3-2 — a player who pre-positions on the header/roof before OPEN can fall directly onto the
+  Relic. Recorded as a hypothesis that future powers (Push, Freeze, projectiles) may provide
+  natural counterplay, to be human-playtested at M4, not assumed solved. See `docs/DECISIONS.md`
+  (2026-09-12) for the full decision and the future-arena-design principle it motivates.
+  Not every future arena needs Arena 01's same objective-access topology.
+- **20-round headless bot-only fairness sample recorded as diagnostic evidence, not acted on:** P2
+  won 55% of rounds; OPEN→win was ~0s in nearly every round because roof/ceiling fallthrough
+  materially affects results — door-usage telemetry under-counts roof-origin arrivals as a result.
+  No spawn, geometry, cost, or bot-difficulty change was made. Telemetry timing resolution should
+  be improved before fairness becomes a serious tuning task.
+- **M3-1 is unchanged and not reopened**: M1 movement, accepted navigation, `Floor→C_M`, vault
+  traversal, ladders, wrapping, the RELIABLE/SKILL policy, and the known deferred edge-sampling
+  findings below all carry forward as-is.
+- **Known, deferred checker findings, not fixed:** four `tools/m3_check.gd` edge-validation cases
+  (`C_Seam→A_E_Bridge`, `A_W_Bridge→Pier`, `VaultFloor→VaultEast`, `VaultEast→A_E`) fail only at
+  one extreme boundary sample position each, pre-dating the M3-2 Step 4/5 work and independent of
+  it (raw `EdgeExecutor` mechanics, not bot decision logic). 20/20 real fairness rounds terminated
+  cleanly with 0 hard recoveries, indicating this does not block real play. Recorded rather than
+  patched, per the standing rule against silently changing M3-1 navigation/geometry.
+- **`tools/arena_check.gd` remains a clean PASS**, unchanged from the M2/M3-1 baseline.
+
+**MILESTONE 3 — CORE GAME LOOP: COMPLETE.** Next milestone per this roadmap: **M4 — Powers & Bot
+Intelligence**, not started. Per the Game Director's direction (see `docs/DECISIONS.md`'s "Future
+match structure" entry and `docs/GAME_DESIGN.md`'s corresponding future-direction section), M4
+implementation must be preceded by a dedicated match-economy design/planning milestone before any
+power is built.
+
 ## Critical Decision Gate
 If the game is not fun as shapes, do not proceed directly to art. Diagnose movement, arena and objective first.
 
 ---
 
 # M4 — Powers & Bot Intelligence
-**Status: [ ] NOT STARTED**
+**Status: [ ] NOT STARTED.** Next milestone after M3's close-out (2026-09-12) — recorded here per
+the roadmap, not begun.
+
+**⚠️ Before any implementation:** the Game Director's "Future match structure" direction
+(`docs/DECISIONS.md`, 2026-09-12; hypothesis detail in `docs/GAME_DESIGN.md`) means M4 must not be
+treated as simply "implement Push, Freeze, Shield and shooting." A dedicated match-economy
+design/planning session — covering what players collect, how powers are acquired and leveled,
+scarcity, death/respawn, the shooting/projectile model, escalation over match time, and how bots
+reason about collecting vs. fighting vs. the objective — must happen **before** power
+implementation begins. Nothing below has been re-planned against that direction yet.
 
 ## Risk Being Tested
 Does interference create the social/chaotic fun Rushlings needs without becoming confusing?

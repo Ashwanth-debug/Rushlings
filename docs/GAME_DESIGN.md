@@ -70,10 +70,25 @@ Avoid:
 - Too many decorative glowing objects that look interactive.
 - Dense foliage/details that hide characters.
 
+**Not every arena needs identical objective-access topology (accepted 2026-09-12).** Arena 01's
+roof/east-wall pre-positioning — a player who legally pre-positions on the vault header before the
+Relic opens can fall directly onto it — was human-playtested and accepted as an emergent strategy
+for *that* arena, not fixed away. Future arenas should deliberately explore different structural
+problems rather than copying Arena 01's shape: more protected objective chambers, portals, moving
+traversal, changing objective entrances, multiple approach structures, or access patterns where
+camping is deliberately harder. Whether a camping-style position stays viable is also expected to
+change once powers exist — see §25 and `docs/DECISIONS.md` (2026-09-12) — so this is not a
+permanent verdict on Arena 01 either, only the current one.
+
 ## 7. Core Match — Baseline Mode
 
 ### Phase 1 — Power Up / Position
-Working duration: ~25 seconds, subject to playtesting.
+**Current M3 baseline (accepted 2026-09-12): 10 seconds**, for the present no-powers prototype —
+15s/25s remain available as debug options, not deleted. **~25 seconds remains the M4 working
+direction** once powers/pickups give this phase real content to fill; see `docs/DECISIONS.md`
+(2026-09-12) for the full M3-2 close-out and the "Future match structure" hypothesis, which
+imagines this phase eventually growing into a longer, escalating "build" period rather than a
+short pre-race countdown.
 
 At match start:
 - Four players spawn at separated positions.
@@ -539,3 +554,100 @@ Only after enough real gameplay data exists, evaluate behavior cloning/imitation
 learning from gameplay traces, and reinforcement learning where appropriate. Do not assume an LLM
 is required — the appropriate technique depends on what the data actually supports. As above, the
 goal remains believable, beatable Rushlings players, not a perfect opponent.
+
+## 25. Future Direction — Escalating Match Structure & In-Match Power Progression (Hypothesis, Not Approved)
+
+**Recorded 2026-09-12, at the M3 close-out. Not current scope. Nothing here is implemented, and
+nothing here changes M3's accepted match loop** — `SETUP → UNLOCKING → OPEN → SEEK_RELIC →
+COLLECTION → RESULTS → REMATCH` remains the current prototype validating movement, arena
+navigation, objective convergence, collection, winner and rematch. This section records a
+longer-term direction to prototype and playtest once that loop is proven, not a rewrite of it.
+
+### The core hypothesis
+
+The intended Rushlings match may eventually be an **escalating experience** rather than the current
+short countdown-then-Relic-race being the final game structure:
+
+```
+MATCH START
+     ↓
+EARLY GAME — BUILD        (explore / collect / weak interactions)
+     ↓
+MID GAME — ESCALATE       (stronger abilities / more encounters / positioning)
+     ↓
+LATE GAME — BATTLE / OBJECTIVE CLIMAX   (stronger attacks / interference / Relic contest)
+     ↓
+WINNER
+```
+
+Players would not begin a round at their strongest. During the match they would explore the arena,
+collect powers/resources/pickups, increase their offensive/defensive capability, choose which
+powers to pursue, encounter and interfere with other players, potentially avoid fights while
+building strength, and position themselves for the later objective/battle. The match should
+escalate over time rather than presenting the same intensity from the first second to the last.
+
+### Approximate timing hypothesis — NOT approved
+
+Working imagination: roughly a **2-minute total match**, with approximately the first half
+weighted more heavily toward building capability and the second half toward combat/objective
+intensity. **Do not encode exactly 60s of collection, 60s of combat, or 120s total as production
+rules** — these are hypotheses to prototype and playtest, not settled timing.
+
+### In-match power progression
+
+Explore whether collected resources/powers can increase what a player is capable of *within the
+same match*, rather than every player starting at maximum strength immediately. Illustrative
+examples only, not an approved upgrade tree: stronger Push, stronger Freeze, a larger
+projectile/bomb or blast radius, additional charges, a stronger Shield, upgraded movement/
+traversal abilities, or other power evolutions. **The important principle: power should be
+earned/buildable during the match, not universally available at full strength from t=0.**
+
+### Different viable player strategies
+
+The system should eventually allow different behaviours to be viable, as hypotheses rather than
+fixed classes (do not create character classes now):
+- **Aggressor** — fights/interferes early.
+- **Builder** — avoids unnecessary fights and collects/upgrades.
+- **Opportunist** — steals pickups or attacks weakened players.
+- **Objective-focused player** — prepares specifically for the Relic opening/endgame.
+
+### Combat can exist before the climax
+
+The first half should **not** necessarily be a safe collection phase. Players may still attack,
+Push, Freeze, disrupt, steal opportunities, and potentially eliminate/respawn one another early.
+The overall power level and intensity should grow through the match — the early game is not
+required to be combat-free, only lower-intensity than the climax.
+
+### Strategic tension (a major future design space, not resolved here)
+
+A player who spends more time collecting/upgrading may become stronger later, but risks losing
+positional advantage, being attacked while collecting, missing contested resources, or being
+poorly positioned when the objective changes. A player who fights constantly may gain immediate
+control but potentially enter the late game less upgraded. This tradeoff is worth exploring
+directly, not designing around in advance.
+
+### Relationship to the Arena 01 roof strategy
+
+The Arena 01 roof/east-wall pre-positioning strategy accepted at M3-2 close-out (§6, and
+`docs/DECISIONS.md`, 2026-09-12) should be **revisited under this future combat system**, not
+removed now. Future powers/projectiles/Push/Freeze may turn an advantageous camping position into
+a contestable strategic location. This is a hypothesis that must be human-playtested, not assumed.
+
+### Relationship to future arenas
+
+Future arenas should explore different relationships between power/resource locations, high-value
+hard-to-reach spaces, combat chokepoints, safe/risky collection routes, objective access, portals/
+traversal, and high ground. Arena design and the power economy should eventually be designed
+together, not arena-first-then-powers-bolted-on.
+
+### M4 planning implication
+
+Do **not** treat M4 as simply "implement Push, Freeze, Shield and shooting." Before M4
+implementation, a fresh design/planning milestone must define: the match economy; what players
+collect; how powers are acquired; inventory/carry rules; whether powers have levels; the upgrade/
+progression model; power spawning/distribution and scarcity; death/respawn; what a kill
+accomplishes; whether players drop resources on death; the shooting/projectile model; escalation
+over match time; the relationship between combat and the Relic; when/how the Relic becomes
+available under this structure; comeback mechanics if needed; and how bots should reason about
+collecting vs. fighting vs. the objective. This planning must happen before power implementation —
+see `docs/ROADMAP.md`'s M4 section and `docs/DECISIONS.md` (2026-09-12).

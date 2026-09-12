@@ -46,6 +46,16 @@ func _run() -> void:
 	await _test_nav_stress_destinations()
 	await _test_vault_destination_change_regression()
 	await _test_stress_label_respects_cap()
+	await _test_match_fsm_timing()
+	await _test_physical_gate_state()
+	await _test_sealed_state_nav_connectivity()
+	await _test_relic_collection_and_winner()
+	await _test_winner_resolution()
+	await _test_results_freeze_and_dwell()
+	await _test_rematch_reset()
+	await _test_goal_switch_under_load()
+	await _test_pier_to_vaultfloor_speed_spread()
+	await _test_bot_only_fairness_rounds()
 	_print_summary()
 	quit(1 if not fails.is_empty() else 0)
 
@@ -82,6 +92,20 @@ func _unload_rig(arena: Node2D) -> void:
 
 func physics_ticks_per_second() -> float:
 	return float(ProjectSettings.get_setting("physics/common/physics_ticks_per_second", 60))
+
+## M3-2 Step 4 (S08): several M3-1/Step-2/3 tests call debug_force_open()
+## purely to physically/logically unseal the vault so ROAM or an explicit
+## NAV_STRESS_TEST target can use it as an ordinary destination - a usage
+## pattern that predates SEEK_RELIC. Since OPEN now also flips every bot's
+## goal to SEEK_RELIC (the real, approved production behaviour), those tests
+## must undo that one incidental side effect immediately afterward or their
+## own explicit target-setting gets silently overridden by the real goal
+## switch a few ticks later. Real gameplay never calls this - only test code
+## that wants "gate open" without "objective changed".
+func _reset_all_goals_to_roam(arena: Node2D) -> void:
+	for b in arena.brains:
+		if b != null:
+			b.reset_goal()
 
 func _band_of(node: String) -> String:
 	# CoverW removed from Arena 01 (Director decision, human-playtest-driven
@@ -161,6 +185,18 @@ func _test_graph_classification() -> void:
 	print("\n--- Test 0: nav-graph edge classification + reliable-only connectivity ---")
 	var rig := await _load_rig()
 	var graph: NavGraph = rig.graph
+	# This is the M3-1 baseline claim, predating the M3-2 vault seal - the
+	# rig loads with MatchDirector in SETUP (sealed) by default, so the gate
+	# must be forced open here or this test would report a connectivity
+	# regression that is actually Step 2's new, intended SETUP behaviour.
+	# The sealed-state equivalent is Test 13, below.
+	graph.set_gate_open(true)
+	# Also stop MatchDirector's own ~10s real timer from firing OPEN on its
+	# own partway through this test - left running, it can trigger a genuine
+	# Relic collection from a roaming bot, which freezes every controller
+	# (docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md S11/S12) and silently breaks
+	# everything from that point on. This test only cares about the graph.
+	rig.arena.get_node("MatchDirector").set_physics_process(false)
 	var counts: Dictionary = graph.edge_counts()
 	_report("edge classification counts", "PASS", "RELIABLE=%d SKILL=%d INVALID=%d (total %d)" % [
 		counts.get("reliable", 0), counts.get("skill", 0), counts.get("invalid", 0), graph.edges.size()
@@ -198,6 +234,11 @@ func _test_strong_connectivity_and_no_sink() -> void:
 	print("\n--- Test 0b: strong connectivity + no-sink (RELIABLE edges only) ---")
 	var rig := await _load_rig()
 	var graph: NavGraph = rig.graph
+	# Same reasoning as Test 0: this is the M3-1 baseline claim (no gate
+	# existed yet), so force the gate open rather than inheriting the rig's
+	# default SETUP-sealed state. Test 13 is the sealed-state equivalent.
+	graph.set_gate_open(true)
+	rig.arena.get_node("MatchDirector").set_physics_process(false)  # see Test 0's identical reasoning
 
 	# No-sink: every node needs at least one RELIABLE outgoing AND at least
 	# one RELIABLE incoming edge, or an explicit named exception above.
@@ -305,6 +346,20 @@ func _test_edge_validation() -> void:
 	var arena: Node2D = rig.arena
 	var geometry: ArenaGeometry = rig.geometry
 	var graph: NavGraph = rig.graph
+	# This test validates every graph edge in isolation, including the five
+	# gated vault edges - it needs the gate PHYSICALLY open for the whole run
+	# (debug_force_open(), not just nav_graph.set_gate_open(true): a sealed
+	# collision shape would fail these edges regardless of what Dijkstra
+	# believes - see door_arrival_check.gd's identical fix), and, since it
+	# can run for real minutes, MatchDirector's own real timer must not also
+	# be free to fire a SECOND time (harmless once already open, but noisy)
+	# and no longer be inert for bots once OPEN (M3-2 Step 4, S08, triggers
+	# the real SEEK_RELIC goal switch) - undo that incidental side effect so
+	# it cannot hijack the TestEdgeController-driven body mid-edge.
+	arena.match_director.debug_force_open()
+	arena.get_node("MatchDirector").set_physics_process(false)
+	graph.set_gate_open(true)  # redundant after debug_force_open(), kept explicit
+	_reset_all_goals_to_roam(arena)
 	var body: CharacterBody2D = arena.players[0]
 
 	var edges_passed := 0
@@ -481,6 +536,21 @@ func _test_vault_entry_exit() -> void:
 	var graph: NavGraph = rig.graph
 	var brain: BotBrain = arena.brains[1]
 	var body: CharacterBody2D = arena.players[1]
+	# This test proves raw M3-1 edge-execution capability, independent of
+	# MatchDirector's state - force the gate open (debug_force_open(), not a
+	# direct nav_graph.set_gate_open(true): this test drives REAL physical
+	# movement through the vault, so the PHYSICAL seal must actually open,
+	# not just Dijkstra's belief that it has - see door_arrival_check.gd's
+	# identical fix) so it is not accidentally testing Step 2's new
+	# SETUP-sealed default instead.
+	arena.match_director.debug_force_open()
+	arena.get_node("MatchDirector").set_physics_process(false)  # see Test 0's identical reasoning - this test runs for several real seconds
+	graph.set_gate_open(true)  # redundant after debug_force_open(), kept explicit
+	# This test proves M3-1 ROAM/manual-drive vault access, not the M3-2 goal
+	# switch - undo debug_force_open()'s incidental SEEK_RELIC side effect
+	# (see _reset_all_goals_to_roam's own comment) so it doesn't hijack the
+	# explicit target-setting below a few ticks later.
+	_reset_all_goals_to_roam(arena)
 
 	# 1. Approach: a bot outside the vault can reach VaultFloor ("Central/
 	# Vault Approach") through RELIABLE edges alone - a pure graph query, no
@@ -578,6 +648,23 @@ func _test_long_run() -> void:
 		var geometry: ArenaGeometry = rig.geometry
 		arena.match_config.match_seed = s
 		arena._wire_bots()
+		# This is an M3-1 ROAM coverage/regression test, predating the M3-2
+		# gate entirely - it expects the FULL original M3-1 map (vault
+		# included) to be open for the whole 120s, same reasoning as Tests
+		# 0/4/7/8. debug_force_open() opens the seal both physically and
+		# logically; Relic's own _physics_process is then disabled so a
+		# roaming bot touching it can never latch a real collection (which
+		# would freeze every controller and corrupt the rest of the
+		# coverage measurement) - Step 3 deliberately keeps bots on plain
+		# ROAM even after OPEN specifically so collection is tested in its
+		# own dedicated tests (14-17), not as an emergent side effect here.
+		arena.match_director.debug_force_open()
+		arena.get_node("MatchDirector").set_physics_process(false)
+		arena.get_node("Relic").set_physics_process(false)
+		# M3-2 Step 4: this test wants plain M3-1 ROAM coverage, not the real
+		# SEEK_RELIC goal switch debug_force_open() now also triggers - undo
+		# it (see _reset_all_goals_to_roam's own comment).
+		_reset_all_goals_to_roam(arena)
 
 		var bot_indices: Array[int] = []
 		for i in range(arena.players.size()):
@@ -815,6 +902,21 @@ func _test_nav_stress_destinations() -> void:
 	print("\n--- Test 7: nav stress test - explicit destination coverage ---")
 	var rig := await _load_rig()
 	var arena: Node2D = rig.arena
+	# NAV_STRESS_TEST sequences explicitly target VaultFloor as "central/
+	# vault approach" coverage - this predates the M3-2 gate, so force it
+	# open (debug_force_open(), not a direct nav_graph.set_gate_open(true):
+	# real bodies physically drive through the vault here, so the PHYSICAL
+	# seal must actually open too - see door_arrival_check.gd's identical
+	# fix) rather than testing against Step 2's new SETUP-sealed default.
+	arena.match_director.debug_force_open()
+	# This test runs for 90 real seconds - see Test 0's identical reasoning
+	# for why MatchDirector's own timer must not also be running.
+	arena.get_node("MatchDirector").set_physics_process(false)
+	rig.graph.set_gate_open(true)  # redundant after debug_force_open(), kept explicit
+	# M3-2 Step 4: NAV_STRESS_TEST's explicit target selection must not be
+	# overridden by the real SEEK_RELIC goal switch debug_force_open() also
+	# triggers now - undo it (see _reset_all_goals_to_roam's own comment).
+	_reset_all_goals_to_roam(arena)
 	arena.set_nav_mode(1)  # BotBrain.Mode.NAV_STRESS_TEST
 
 	var bot_indices: Array[int] = []
@@ -937,6 +1039,27 @@ func _test_vault_destination_change_regression() -> void:
 	var rig := await _load_rig()
 	var arena: Node2D = rig.arena
 	var geometry: ArenaGeometry = rig.geometry
+	# Explicit vault destination-change regression, independent of match
+	# state - force the gate open (see Test 4/7's identical reasoning: real
+	# bodies physically drive through the vault here, so debug_force_open()
+	# is required, not a direct nav_graph.set_gate_open(true), to actually
+	# open the PHYSICAL seal too).
+	arena.match_director.debug_force_open()
+	arena.get_node("MatchDirector").set_physics_process(false)  # see Test 0's identical reasoning
+	rig.graph.set_gate_open(true)  # redundant after debug_force_open(), kept explicit
+	# M3-2 Step 4: this test drives an explicit target via NAV_STRESS_TEST
+	# (_drive_to_destination) - it must not be overridden by the real
+	# SEEK_RELIC goal switch debug_force_open() also triggers now (see
+	# _reset_all_goals_to_roam's own comment).
+	_reset_all_goals_to_roam(arena)
+	# M3-2 Step 3's live Relic sits directly on the x=872 case's walk path
+	# from VaultFloor toward VaultEast (it crosses the Relic's own x980-1020
+	# zone en route) and is always-monitoring - an uncontrolled collection
+	# mid-test would latch RESULTS and freeze every controller for the rest
+	# of this test's sub-cases, exactly the hazard Tests 5/7 already guard
+	# against for the same reason. This test isolates raw traversal/goal-
+	# switch logic, not collection (which has its own dedicated tests).
+	arena.get_node("Relic").set_physics_process(false)
 	var brain: BotBrain = arena.brains[2]  # slot 3 (P3)
 	var body: CharacterBody2D = arena.players[2]
 
@@ -1072,4 +1195,734 @@ func _test_stress_label_respects_cap() -> void:
 	else:
 		_report("stress label stays sequence-complete arbitrarily far past the cap", "FAIL", "stress_index=%d -> '%s'" % [brain.stress_index, well_past_cap])
 
+	await _unload_rig(arena)
+
+# --- Test 10: MatchDirector FSM timing (M3-2 Step 2) --------------------------
+# docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md S19 Step 2, item 9: verify
+# SETUP -> UNLOCKING -> OPEN at time_scale 1.0 and 1.25 with no frame-count
+# assumptions - the pass/fail check is against MatchDirector.clock (real
+# elapsed game seconds), not against how many physics_frame signals fired to
+# get there.
+
+func _test_match_fsm_timing() -> void:
+	print("\n--- Test 10: MatchDirector FSM timing at time_scale 1.0 and 1.25 ---")
+	for ts in [1.0, 1.25]:
+		var rig := await _load_rig()
+		var arena: Node2D = rig.arena
+		var director: MatchDirector = arena.match_director
+		var hz := physics_ticks_per_second()
+		Engine.time_scale = ts
+		var unlocking_entered_at := -1.0
+		var open_entered_at := -1.0
+		var budget := int(hz * (director.setup_duration + 5.0) / ts)
+		var ticks := 0
+		while open_entered_at < 0.0 and ticks < budget:
+			await physics_frame
+			ticks += 1
+			if director.state == MatchDirector.State.UNLOCKING and unlocking_entered_at < 0.0:
+				unlocking_entered_at = director.clock
+			if director.state == MatchDirector.State.OPEN and open_entered_at < 0.0:
+				open_entered_at = director.clock
+		Engine.time_scale = 1.0
+		var expected_unlocking: float = director.setup_duration - director.unlocking_duration
+		if unlocking_entered_at < 0.0:
+			_report("FSM timing (time_scale=%.2f): reaches UNLOCKING" % ts, "FAIL", "never entered UNLOCKING within budget")
+		else:
+			var ok: bool = abs(unlocking_entered_at - expected_unlocking) < 0.25
+			_report("FSM timing (time_scale=%.2f): UNLOCKING at clock~=%.1fs" % [ts, expected_unlocking], "PASS" if ok else "FAIL", "actually entered at clock=%.3fs" % unlocking_entered_at)
+		if open_entered_at < 0.0:
+			_report("FSM timing (time_scale=%.2f): reaches OPEN" % ts, "FAIL", "never entered OPEN within budget")
+		else:
+			var ok2: bool = abs(open_entered_at - director.setup_duration) < 0.25
+			_report("FSM timing (time_scale=%.2f): OPEN at clock~=%.1fs" % [ts, director.setup_duration], "PASS" if ok2 else "FAIL", "actually entered at clock=%.3fs" % open_entered_at)
+		await _unload_rig(arena)
+
+# --- Test 11: Physical gate state (M3-2 Step 2) --------------------------------
+# SETUP sealed, UNLOCKING sealed even mid-lift, OPEN physically open and
+# matching the accepted M3-1 west door - the same standing-start drop
+# tools/arena_check.gd's "West gateway enter" test already proves for M3-1.
+
+func _assert_vault_sealed_from_standing_start(body: CharacterBody2D, geometry: ArenaGeometry, label: String) -> void:
+	var pier: Dictionary = geometry.aabb("Pier")
+	await _place_and_settle(body, Vector2(pier.right + geometry.player_half_w + 2.0, pier.top - geometry.player_half_h), 150)
+	var landed_on := geometry.canonical_platform(body)
+	if landed_on == "VaultFloor":
+		_report("Gate %s: vault stays physically sealed" % label, "FAIL", "a standing-start west drop reached VaultFloor - the seal is not blocking")
+	else:
+		_report("Gate %s: vault stays physically sealed" % label, "PASS", "west drop landed on '%s', not VaultFloor" % landed_on)
+
+func _test_physical_gate_state() -> void:
+	print("\n--- Test 11: Physical gate state across SETUP/UNLOCKING/OPEN ---")
+	var rig := await _load_rig()
+	var arena: Node2D = rig.arena
+	var geometry: ArenaGeometry = rig.geometry
+	var director: MatchDirector = arena.match_director
+	var body: CharacterBody2D = arena.players[0]
+	var hz := physics_ticks_per_second()
+	var budget := int(hz * (director.setup_duration + 3.0))
+
+	await _assert_vault_sealed_from_standing_start(body, geometry, "SETUP")
+
+	var mid_unlocking_clock: float = director.setup_duration - director.unlocking_duration * 0.5
+	var reached_mid := false
+	for _i in range(budget):
+		await physics_frame
+		if director.state == MatchDirector.State.UNLOCKING and director.clock >= mid_unlocking_clock:
+			reached_mid = true
+			break
+	if not reached_mid:
+		_report("Gate UNLOCKING probe reached (bars mid-lift)", "FAIL", "never observed UNLOCKING at/after clock=%.2fs within budget" % mid_unlocking_clock)
+	else:
+		var progress: float = director.unlocking_progress()
+		_report("Gate UNLOCKING probe reached (bars mid-lift)", "PASS" if progress > 0.05 else "WARN", "unlocking_progress=%.2f at clock=%.2fs" % [progress, director.clock])
+		await _assert_vault_sealed_from_standing_start(body, geometry, "UNLOCKING (bars mid-lift)")
+
+	var reached_open := false
+	for _i in range(budget):
+		await physics_frame
+		if director.state == MatchDirector.State.OPEN:
+			reached_open = true
+			break
+	if not reached_open:
+		_report("Gate OPEN probe reached", "FAIL", "never observed OPEN within budget")
+	else:
+		var pier: Dictionary = geometry.aabb("Pier")
+		await _place_and_settle(body, Vector2(pier.right + geometry.player_half_w + 2.0, pier.top - geometry.player_half_h), 150)
+		var landed_on := geometry.canonical_platform(body)
+		if landed_on == "VaultFloor":
+			_report("Gate OPEN: standing-start west entry reaches VaultFloor", "PASS", "matches the accepted M3-1 vault door")
+		else:
+			_report("Gate OPEN: standing-start west entry reaches VaultFloor", "FAIL", "landed on '%s' instead" % landed_on)
+
+	await _unload_rig(arena)
+
+# --- Test 13: Sealed-state RELIABLE nav-graph connectivity (M3-2 Step 2) ------
+# docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md S07/A2: while the vault is sealed,
+# its five interior edges must not exist for ordinary bot pathfinding, and
+# the rest of the RELIABLE subgraph must stay connected without them -
+# VaultFloor/VaultEast are the only named, expected exceptions.
+
+func _test_sealed_state_nav_connectivity() -> void:
+	print("\n--- Test 13: Sealed-state RELIABLE connectivity + no ROAM bot uses a gated edge ---")
+	var rig := await _load_rig()
+	var arena: Node2D = rig.arena
+	var graph: NavGraph = rig.graph
+	graph.set_gate_open(false)
+	# This test's whole premise is "stays sealed for the entire 20s live
+	# sim" - MatchDirector's own ~10s real timer left running would
+	# genuinely reach OPEN partway through and flip nav_graph.gate_open back
+	# to true on its own (arena_01.gd's _on_match_state_changed), silently
+	# invalidating the back half of the sim. See Test 0's identical
+	# reasoning for the general hazard.
+	arena.get_node("MatchDirector").set_physics_process(false)
+
+	# VaultFloor/VaultEast are the new M3-2 gated exceptions; CoverE/B_Under
+	# are the PRE-EXISTING M3-1 exceptions from Test 0b's CONNECTIVITY_EXCEPTIONS
+	# (no RELIABLE incoming edge at all, gate-independent) - both sets must be
+	# excluded here or this test would flag a Test-0b-acknowledged condition
+	# as a new Step 2 regression.
+	var EXCEPTIONS: Array = ["VaultFloor", "VaultEast"] + CONNECTIVITY_EXCEPTIONS.keys()
+	var start := "Floor"
+	var reachable: Dictionary = graph.reliable_reachable_from(start)
+	var missing: Array = []
+	for n in graph.nodes:
+		if EXCEPTIONS.has(n):
+			continue
+		if not reachable.get(n, false):
+			missing.append(n)
+	if missing.is_empty():
+		_report("Sealed-state RELIABLE connectivity from '%s'" % start, "PASS", "every non-vault node reachable; vault interior (%s) correctly excluded while sealed" % ", ".join(EXCEPTIONS))
+	else:
+		_report("Sealed-state RELIABLE connectivity from '%s'" % start, "FAIL", "unreachable while sealed: %s" % ", ".join(missing))
+
+	var no_sink_fail: Array = []
+	for n in graph.nodes:
+		if EXCEPTIONS.has(n):
+			continue
+		var out_reachable: Dictionary = graph.reliable_reachable_from(n)
+		var has_any := false
+		for m in out_reachable.keys():
+			if m != n and not EXCEPTIONS.has(m):
+				has_any = true
+				break
+		if not has_any:
+			no_sink_fail.append(n)
+	if no_sink_fail.is_empty():
+		_report("Sealed-state no-sink (every non-vault node can still reach another)", "PASS", "no dead ends introduced by sealing")
+	else:
+		_report("Sealed-state no-sink (every non-vault node can still reach another)", "FAIL", "sink nodes while sealed: %s" % ", ".join(no_sink_fail))
+
+	var gated_edges: Array = graph.edges.filter(func(e): return e.get("gated", false))
+	var brain: BotBrain = arena.brains[1]
+	var any_costed_finite := false
+	for e in gated_edges:
+		if brain._weighted_cost(e) != INF:
+			any_costed_finite = true
+	if gated_edges.is_empty():
+		_report("Sealed gated edges excluded from bot costing", "FAIL", "no edges are tagged 'gated' - the vault interior is not gated at all")
+	elif any_costed_finite:
+		_report("Sealed gated edges excluded from bot costing (%d edges)" % gated_edges.size(), "FAIL", "at least one gated edge did not cost INF while sealed")
+	else:
+		_report("Sealed gated edges excluded from bot costing (%d edges)" % gated_edges.size(), "PASS", "all report INF while sealed")
+
+	# Live simulation, not just static graph math: 20s of real ROAM with all
+	# three bots while sealed, confirming _weighted_cost's INF and
+	# ArenaRegions.NO_ROAM_TARGETS actually agree in a running sim.
+	var hz := physics_ticks_per_second()
+	var ticks := int(hz * 20.0)
+	var entered_vault := false
+	for _i in range(ticks):
+		await physics_frame
+		for i in range(arena.brains.size()):
+			var b: BotBrain = arena.brains[i]
+			if b != null and (b.current_node == "VaultFloor" or b.current_node == "VaultEast"):
+				entered_vault = true
+	if entered_vault:
+		_report("Sealed-state ROAM: no bot enters the vault interior (20s live sim)", "FAIL", "a bot's current_node was VaultFloor/VaultEast during a sealed ROAM run")
+	else:
+		_report("Sealed-state ROAM: no bot enters the vault interior (20s live sim)", "PASS", "no bot's current_node was VaultFloor/VaultEast across a sealed ROAM run")
+
+	await _unload_rig(arena)
+
+# --- Test 14: Relic collection (M3-2 Step 3) ----------------------------------
+# docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md S10: impossible during SETUP and
+# UNLOCKING (even with a body forced to overlap it, bypassing the physical
+# seal on purpose - this isolates the Relic/MatchDirector LOGIC guard from
+# the physical one, which Step 1/2 already proved separately), active only
+# at OPEN, fires exactly once.
+
+func _test_relic_collection_and_winner() -> void:
+	print("\n--- Test 14: Relic collection - impossible during SETUP/UNLOCKING, active only at OPEN, fires once ---")
+	var rig := await _load_rig()
+	var arena: Node2D = rig.arena
+	var director: MatchDirector = arena.match_director
+	var relic: Area2D = arena.get_node("Relic")
+	var p1: CharacterBody2D = arena.players[0]
+
+	p1.reset_to(relic.global_position)
+	for _i in range(15):
+		await physics_frame
+	# Relic.monitoring stays permanently true by design (see relic.gd's own
+	# header comment - toggling it off/on was found to leave stale overlap
+	# data across a body's later movement, which broke rematch winner
+	# resolution). The guard against collection during SETUP/UNLOCKING is
+	# purely the state check in _physics_process, proven directly below by
+	# state never advancing despite this forced overlap.
+	_report("Relic collection guard active during SETUP (forced overlap)", "FAIL" if relic._collected else "PASS", "_collected=%s" % relic._collected)
+	_report("Collection impossible during SETUP (forced overlap)", "PASS" if director.state == MatchDirector.State.SETUP else "FAIL", "state='%s'" % director.state)
+
+	director._set_state(MatchDirector.State.UNLOCKING)
+	for _i in range(15):
+		await physics_frame
+	_report("Relic collection guard active during UNLOCKING (forced overlap)", "FAIL" if relic._collected else "PASS", "_collected=%s" % relic._collected)
+	_report("Collection impossible during UNLOCKING (forced overlap)", "PASS" if director.state == MatchDirector.State.UNLOCKING else "FAIL", "state='%s'" % director.state)
+
+	director.debug_force_open()
+	for _i in range(15):
+		await physics_frame
+	if director.state == MatchDirector.State.RESULTS and director.winner_slot_id == 1:
+		_report("Collection active at OPEN, correct winner", "PASS", "P1 collected, winner_slot_id=1")
+	else:
+		_report("Collection active at OPEN, correct winner", "FAIL", "state='%s' winner_slot_id=%d" % [director.state, director.winner_slot_id])
+
+	var winner_after_first: int = director.winner_slot_id
+	var hz := physics_ticks_per_second()
+	for _i in range(int(1.0 * hz)):
+		await physics_frame
+	if director.state == MatchDirector.State.RESULTS and director.winner_slot_id == winner_after_first:
+		_report("Collection fires exactly once", "PASS", "RESULTS/winner unchanged after 1s of further ticks")
+	else:
+		_report("Collection fires exactly once", "FAIL", "state/winner changed: state='%s' winner=%d" % [director.state, director.winner_slot_id])
+
+	await _unload_rig(arena)
+
+# --- Test 15: deterministic winner resolution (M3-2 Step 3) ------------------
+# docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md S11: single overlap, same-frame
+# multi-overlap (closest to centre wins), exact-distance tie (lowest
+# slot_id wins). Controllers are frozen for the whole test so bot ROAM
+# cannot move a body out of its deliberately-placed test position before the
+# poll runs - this isolates the tie-break MATH, not live navigation.
+
+func _test_winner_resolution() -> void:
+	print("\n--- Test 15: deterministic winner resolution (single/multi-overlap/tie) ---")
+
+	var rig := await _load_rig()
+	var arena: Node2D = rig.arena
+	var director: MatchDirector = arena.match_director
+	var relic: Area2D = arena.get_node("Relic")
+	for p in arena.players:
+		p.controller.set_frozen(true)
+	arena.players[1].reset_to(relic.global_position)  # P2 alone
+	director.debug_force_open()
+	for _i in range(15):
+		await physics_frame
+	if director.state == MatchDirector.State.RESULTS and director.winner_slot_id == 2:
+		_report("Winner: single overlap", "PASS", "P2 alone -> P2 wins")
+	else:
+		_report("Winner: single overlap", "FAIL", "winner_slot_id=%d state='%s'" % [director.winner_slot_id, director.state])
+	await _unload_rig(arena)
+
+	rig = await _load_rig()
+	arena = rig.arena
+	director = arena.match_director
+	relic = arena.get_node("Relic")
+	for p in arena.players:
+		p.controller.set_frozen(true)
+	var center: Vector2 = relic.global_position
+	arena.players[0].reset_to(center + Vector2(15.0, 0.0))   # P1, dist 15
+	arena.players[1].reset_to(center + Vector2(-5.0, 0.0))   # P2, dist 5 - closest
+	arena.players[2].reset_to(center + Vector2(10.0, 0.0))   # P3, dist 10
+	director.debug_force_open()
+	for _i in range(15):
+		await physics_frame
+	if director.state == MatchDirector.State.RESULTS and director.winner_slot_id == 2:
+		_report("Winner: same-frame multi-overlap, closest wins", "PASS", "P2 (dist 5) wins over P1 (15) and P3 (10)")
+	else:
+		_report("Winner: same-frame multi-overlap, closest wins", "FAIL", "winner_slot_id=%d state='%s'" % [director.winner_slot_id, director.state])
+	await _unload_rig(arena)
+
+	rig = await _load_rig()
+	arena = rig.arena
+	director = arena.match_director
+	relic = arena.get_node("Relic")
+	for p in arena.players:
+		p.controller.set_frozen(true)
+	center = relic.global_position
+	arena.players[3].reset_to(center + Vector2(8.0, 0.0))    # P4, dist 8
+	arena.players[1].reset_to(center + Vector2(-8.0, 0.0))   # P2, dist 8 - exact tie, lower slot
+	director.debug_force_open()
+	for _i in range(15):
+		await physics_frame
+	if director.state == MatchDirector.State.RESULTS and director.winner_slot_id == 2:
+		_report("Winner: exact-distance tie, lowest slot_id wins", "PASS", "P2 (slot 2) beats P4 (slot 4) on an exact 8px tie")
+	else:
+		_report("Winner: exact-distance tie, lowest slot_id wins", "FAIL", "winner_slot_id=%d state='%s'" % [director.winner_slot_id, director.state])
+	await _unload_rig(arena)
+
+# --- Test 16: RESULTS - frozen gameplay, HUD, rematch dwell gate (M3-2 Step 3)
+
+func _test_results_freeze_and_dwell() -> void:
+	print("\n--- Test 16: RESULTS - frozen gameplay, correct HUD, rematch dwell gate ---")
+	var rig := await _load_rig()
+	var arena: Node2D = rig.arena
+	var director: MatchDirector = arena.match_director
+	var relic: Area2D = arena.get_node("Relic")
+
+	arena.players[2].reset_to(relic.global_position)  # P3 wins
+	director.debug_force_open()
+	for _i in range(15):
+		await physics_frame
+	if director.state != MatchDirector.State.RESULTS or director.winner_slot_id != 3:
+		_report("RESULTS setup (P3 wins)", "FAIL", "state='%s' winner=%d - cannot continue this test" % [director.state, director.winner_slot_id])
+		await _unload_rig(arena)
+		return
+	_report("RESULTS setup (P3 wins)", "PASS", "state=RESULTS winner_slot_id=3")
+
+	var all_frozen := true
+	for p in arena.players:
+		if not p.controller.frozen:
+			all_frozen = false
+		if p.controller.horizontal() != 0.0 or p.controller.vertical() != 0.0 or p.controller.jump_pressed(false):
+			all_frozen = false
+	_report("RESULTS freezes every controller", "PASS" if all_frozen else "FAIL", "all 4 controllers frozen with zero intent" if all_frozen else "at least one controller is not frozen or reports nonzero intent")
+
+	var match_label: Label = arena.get_node("HUD/MatchLabel")
+	await process_frame
+	var expected := "P3 WINS\n[R] REMATCH"
+	_report("Result HUD text correct", "PASS" if match_label.text == expected else "FAIL", "got '%s'" % match_label.text.replace("\n", "\\n"))
+
+	_report("Rematch ignored before minimum dwell", "FAIL" if director.rematch_ready() else "PASS", "rematch_ready()=%s immediately after RESULTS began" % director.rematch_ready())
+
+	var hz := physics_ticks_per_second()
+	for _i in range(int(0.8 * hz)):  # 0.8s < 1.2s - still inside the dwell window
+		await physics_frame
+	_report("Rematch still ignored mid-dwell (0.8s < 1.2s)", "FAIL" if director.rematch_ready() else "PASS", "rematch_ready()=%s at results_dwell=%.2fs" % [director.rematch_ready(), director.results_dwell])
+
+	for _i in range(int(0.6 * hz)):  # past 1.2s total
+		await physics_frame
+	_report("Rematch accepted after the minimum dwell (>1.2s)", "PASS" if director.rematch_ready() else "FAIL", "rematch_ready()=%s at results_dwell=%.2fs" % [director.rematch_ready(), director.results_dwell])
+
+	await _unload_rig(arena)
+
+# --- Test 17: rematch reset, multi-round, no scene reload (M3-2 Step 3) ------
+# docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md S13: positions, velocities,
+# in_traversal_zone, fresh BotBrains (new instances, empty path/executor/
+# blacklist, hard_recovery_count 0), gate sealed, Relic non-collectible,
+# clock zero, result cleared - run across 3 rounds without a scene reload,
+# and verify the approved non-colliding seed formula
+# (match_seed + round_index*101 + slot_id) holds with no collisions.
+
+func _test_rematch_reset() -> void:
+	print("\n--- Test 17: rematch reset (multi-round, no scene reload) ---")
+	var rig := await _load_rig()
+	var arena: Node2D = rig.arena
+	var director: MatchDirector = arena.match_director
+	var relic: Area2D = arena.get_node("Relic")
+	var hz := physics_ticks_per_second()
+
+	var seen_seeds: Dictionary = {}  # seed -> "round R slot S", for the collision check
+	var seed_collision := false
+
+	var winners := [1, 2, 3]
+	for round_i in range(winners.size()):
+		var winner_slot: int = winners[round_i]
+		# Move everyone and give them velocity first, so the reset is
+		# provably doing work, not just finding things already correct.
+		for p in arena.players:
+			p.reset_to(p.global_position + Vector2(37.0, -5.0))
+			p.velocity = Vector2(123.0, -45.0)
+		arena.players[winner_slot - 1].reset_to(relic.global_position)
+		# A body just teleported via reset_to() is not necessarily reflected
+		# in the physics server's own overlap query on the very next tick -
+		# a few settle frames before forcing OPEN avoids querying stale
+		# collision state from before the teleport (never an issue in real
+		# play, where SETUP/UNLOCKING's multi-second duration always gives
+		# the physics server time to catch up before OPEN can ever fire).
+		for _i in range(5):
+			await physics_frame
+		director.debug_force_open()
+		for _i in range(15):
+			await physics_frame
+		if director.state != MatchDirector.State.RESULTS or director.winner_slot_id != winner_slot:
+			_report("Rematch round %d setup" % (round_i + 1), "FAIL", "state='%s' winner=%d" % [director.state, director.winner_slot_id])
+			continue
+		for _i in range(int(1.3 * hz)):
+			await physics_frame
+		if not director.rematch_ready():
+			_report("Rematch round %d: dwell elapsed" % (round_i + 1), "FAIL", "rematch_ready() still false after 1.3s")
+			continue
+
+		var brains_before: Array = arena.brains.duplicate()
+		arena._full_reset()
+
+		var spawns: Array = [
+			arena.get_node("Markers/Spawn1").global_position, arena.get_node("Markers/Spawn2").global_position,
+			arena.get_node("Markers/Spawn3").global_position, arena.get_node("Markers/Spawn4").global_position,
+		]
+		var positions_ok := true
+		var velocities_ok := true
+		var zones_ok := true
+		for i in range(arena.players.size()):
+			var p = arena.players[i]
+			if p.global_position.distance_to(spawns[i]) > 0.5:
+				positions_ok = false
+			if p.velocity != Vector2.ZERO:
+				velocities_ok = false
+			if p.in_traversal_zone:
+				zones_ok = false
+		_report("Rematch round %d: all 4 bodies at accepted spawns" % (round_i + 1), "PASS" if positions_ok else "FAIL", "")
+		_report("Rematch round %d: velocity cleared" % (round_i + 1), "PASS" if velocities_ok else "FAIL", "")
+		_report("Rematch round %d: no body left in a traversal zone" % (round_i + 1), "PASS" if zones_ok else "FAIL", "")
+
+		var brains_fresh := true
+		for i in range(arena.brains.size()):
+			if arena.brains[i] == null:
+				continue  # P1 (human) has no brain
+			if arena.brains[i] == brains_before[i]:
+				brains_fresh = false
+			if not arena.brains[i].path.is_empty() or arena.brains[i].executor != null:
+				brains_fresh = false
+			if arena.brains[i].hard_recovery_count != 0:
+				brains_fresh = false
+			if not arena.brains[i].blocked_until.is_empty():
+				brains_fresh = false
+		_report("Rematch round %d: fresh BotBrains (new instances, empty path/blacklist)" % (round_i + 1), "PASS" if brains_fresh else "FAIL", "")
+
+		# relic.monitoring is permanently true by design (see relic.gd) -
+		# non-collectible is proven by _collected instead, which SETUP
+		# resets and which nothing can bypass while state != OPEN.
+		var gate_ok: bool = director.state == MatchDirector.State.SETUP and director.clock == 0.0 and director.winner_slot_id == -1 and not relic._collected
+		_report("Rematch round %d: gate SETUP, clock 0, Relic non-collectible, result cleared" % (round_i + 1), "PASS" if gate_ok else "FAIL", "state='%s' clock=%.2f winner=%d _collected=%s" % [director.state, director.clock, director.winner_slot_id, relic._collected])
+
+		var seeds_ok := true
+		for i in range(arena.brains.size()):
+			if arena.brains[i] == null:
+				continue
+			var slot_id: int = i + 1
+			var expected_seed: int = arena.match_config.match_seed + arena.round_index * 101 + slot_id
+			if int(arena.brains[i].rng.seed) != expected_seed:
+				seeds_ok = false
+			var key: String = "round=%d slot=%d" % [arena.round_index, slot_id]
+			if seen_seeds.has(expected_seed):
+				seed_collision = true
+			seen_seeds[expected_seed] = key
+		_report("Rematch round %d: deterministic seed (match_seed + round_index*101 + slot_id)" % (round_i + 1), "PASS" if seeds_ok else "FAIL", "round_index=%d" % arena.round_index)
+
+	_report("No seed collisions across %d rounds x bot slots" % winners.size(), "FAIL" if seed_collision else "PASS", "%d distinct seeds observed" % seen_seeds.size())
+
+	await _unload_rig(arena)
+
+# --- Test 18: Bot goal switch under load (M3-2 Step 4) -----------------------
+# docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md S08/S19 Step 4, test 14: fire OPEN
+# with a bot mid-edge on every edge type (walk, jump, drop, ladder, launch),
+# airborne, and idle on Floor/an upper band/a vault approach. Asserts: no
+# per-tick position delta big enough to be a teleport (wrap-aware), the bot's
+# goal actually flips to SEEK_RELIC, and the bot makes real, bounded-time
+# forward progress afterward (reaches VaultFloor, or at minimum leaves its
+# stale node) without excessive hard recoveries (jump/recovery spam).
+
+const GOAL_SWITCH_MAX_TICK_DELTA := 150.0   # px/tick - generous vs. normal physics, tight vs. a teleport
+const GOAL_SWITCH_PROGRESS_BUDGET := 20.0   # seconds after OPEN to reach VaultFloor
+const GOAL_SWITCH_MAX_HARD_RECOVERIES := 2
+
+func _test_goal_switch_under_load() -> void:
+	print("\n--- Test 18: bot goal switch under load (per-edge-type + airborne + idle matrix) ---")
+	var scenarios: Array = [
+		{"label": "idle on Floor", "kind": "idle", "node": "Floor"},
+		{"label": "idle on upper band (A_W)", "kind": "idle", "node": "A_W"},
+		{"label": "idle near vault approach (Pier)", "kind": "idle", "node": "Pier"},
+		{"label": "mid walk (A_W->A_W_Bridge)", "kind": "edge", "from": "A_W", "to": "A_W_Bridge", "edge_type": "walk", "wait_ticks": 5},
+		{"label": "mid jump, airborne (C_W->C_M)", "kind": "edge", "from": "C_W", "to": "C_M", "edge_type": "jump", "wait_for": "airborne"},
+		{"label": "mid drop, airborne (B_W->C_W)", "kind": "edge", "from": "B_W", "to": "C_W", "edge_type": "drop", "wait_for": "airborne"},
+		{"label": "mid ladder climb (C_W->A_W)", "kind": "edge", "from": "C_W", "to": "A_W", "edge_type": "ladder", "wait_for": "climbing"},
+		{"label": "mid launch, airborne (Floor->B_W)", "kind": "edge", "from": "Floor", "to": "B_W", "edge_type": "launch", "wait_for": "launch_air"},
+	]
+	for scenario in scenarios:
+		await _run_goal_switch_scenario(scenario)
+
+func _find_edge(graph: NavGraph, from: String, to: String, edge_type: String) -> Dictionary:
+	for e in graph.edges:
+		if e.from == from and e.to == to and e.type == edge_type:
+			return e
+	return {}
+
+func _run_goal_switch_scenario(scenario: Dictionary) -> void:
+	var label: String = scenario.label
+	var rig := await _load_rig()
+	var arena: Node2D = rig.arena
+	var geometry: ArenaGeometry = rig.geometry
+	var graph: NavGraph = rig.graph
+	arena.get_node("MatchDirector").set_physics_process(false)  # drive the FSM by hand, see Test 0's reasoning
+	# Isolate to the one bot under test (slot 2 / index 1) - freeze the other
+	# two bots so neither can reach and collect the Relic first and freeze
+	# everyone via RESULTS before this scenario's own assertions run.
+	arena.players[2].controller = FrozenController.new()
+	arena.players[3].controller = FrozenController.new()
+	var brain: BotBrain = arena.brains[1]
+	var body: CharacterBody2D = arena.players[1]
+
+	var hz := physics_ticks_per_second()
+
+	if scenario.kind == "idle":
+		var aabb: Dictionary = geometry.aabb(scenario.node)
+		await _place_and_settle(body, Vector2(aabb.center.x, aabb.top - geometry.player_half_h))
+		body.controller = BotController.new(brain)  # _place_and_settle leaves a FrozenController behind
+		brain.current_node = scenario.node
+		brain.target_node = ""
+		brain.path = []
+		brain.executor = null
+	else:
+		var edge: Dictionary = _find_edge(graph, scenario.from, scenario.to, scenario.edge_type)
+		if edge.is_empty():
+			_report("goal switch: %s" % label, "FAIL", "no %s edge %s->%s in the graph" % [scenario.edge_type, scenario.from, scenario.to])
+			await _unload_rig(arena)
+			return
+		var from_aabb: Dictionary = geometry.aabb(scenario.from)
+		await _place_and_settle(body, Vector2(from_aabb.center.x, from_aabb.top - geometry.player_half_h))
+		body.controller = BotController.new(brain)  # _place_and_settle leaves a FrozenController behind
+		brain.current_node = scenario.from
+		brain.target_node = scenario.to
+		brain.path = [edge]
+		brain.path_index = 0
+		brain.executor = EdgeExecutor.new(body, geometry, edge)
+		# Drive the real BotBrain loop (not just the executor) until the
+		# requested mid-edge condition holds, or give up after a generous
+		# budget - a scenario that can never reach its own mid-edge condition
+		# is itself worth reporting, not silently skipped.
+		var reached_condition := false
+		for _i in range(int(6.0 * hz)):
+			await physics_frame
+			match scenario.get("wait_for", ""):
+				"airborne":
+					reached_condition = not body.is_on_floor()
+				"climbing":
+					reached_condition = body.is_climbing
+				"launch_air":
+					reached_condition = not body.is_on_floor() and body.velocity.y < -200.0
+				_:
+					pass
+			if scenario.has("wait_ticks"):
+				reached_condition = _i >= int(scenario.wait_ticks)
+			if reached_condition:
+				break
+		if not reached_condition:
+			_report("goal switch: %s (reached mid-edge state)" % label, "WARN", "never observed the intended mid-edge condition - firing OPEN at whatever state resulted anyway")
+
+	# Fire the real production OPEN cascade: physically opens the gate AND
+	# calls notify_open() on every brain, via arena_01.gd's own
+	# _on_match_state_changed wiring - not a hand-rolled shortcut.
+	arena.match_director.debug_force_open()
+
+	var max_tick_delta := 0.0
+	var last_pos: Vector2 = body.global_position
+	var reached_vault := false
+	var goal_flipped := false
+	var budget_ticks := int(GOAL_SWITCH_PROGRESS_BUDGET * hz)
+	for i in range(budget_ticks):
+		await physics_frame
+		var dx: float = abs(geometry.shortest_diff(body.global_position.x, last_pos.x))
+		max_tick_delta = max(max_tick_delta, dx)
+		last_pos = body.global_position
+		if brain.goal == BotBrain.Goal.SEEK_RELIC:
+			goal_flipped = true
+		if geometry.canonical_platform(body) == "VaultFloor" and body.is_on_floor():
+			reached_vault = true
+			break
+
+	if not goal_flipped:
+		_report("goal switch: %s (goal flips to SEEK_RELIC)" % label, "FAIL", "brain.goal never became SEEK_RELIC")
+	else:
+		_report("goal switch: %s (goal flips to SEEK_RELIC)" % label, "PASS", "")
+
+	if max_tick_delta > GOAL_SWITCH_MAX_TICK_DELTA:
+		_report("goal switch: %s (no teleport)" % label, "FAIL", "worst single-tick position delta %.1fpx (> %.1fpx budget) - looks like a position write, not physics" % [max_tick_delta, GOAL_SWITCH_MAX_TICK_DELTA])
+	else:
+		_report("goal switch: %s (no teleport)" % label, "PASS", "worst single-tick delta %.1fpx" % max_tick_delta)
+
+	if reached_vault:
+		_report("goal switch: %s (reaches VaultFloor within %.0fs)" % [label, GOAL_SWITCH_PROGRESS_BUDGET], "PASS", "arrived, current_node='%s'" % brain.current_node)
+	else:
+		_report("goal switch: %s (reaches VaultFloor within %.0fs)" % [label, GOAL_SWITCH_PROGRESS_BUDGET], "FAIL", "never reached VaultFloor - final debug_state=%s current_node='%s' target='%s'" % [brain.debug_state(), brain.current_node, brain.target_node])
+
+	if brain.hard_recovery_count > GOAL_SWITCH_MAX_HARD_RECOVERIES:
+		_report("goal switch: %s (no jump/recovery spam)" % label, "FAIL", "%d hard recoveries - looks like spam, not a clean re-path" % brain.hard_recovery_count)
+	else:
+		_report("goal switch: %s (no jump/recovery spam)" % label, "PASS", "%d hard recoveries" % brain.hard_recovery_count)
+
+	await _unload_rig(arena)
+
+# --- Test 19: Pier -> VaultFloor from a spread of arrival speeds (M3-2 Step 4)
+# docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md S19 Step 4, test 18 / R8: "a bot
+# takes Pier -> VaultFloor at full speed and lands on VaultGateW" - far more
+# likely once SEEK_RELIC sends bots through this edge under real time
+# pressure than it ever was under plain ROAM. Same drive-to-completion
+# mechanism as Test 1, but sweeping ARRIVAL SPEED at a fixed start position
+# rather than start position at zero velocity.
+
+func _test_pier_to_vaultfloor_speed_spread() -> void:
+	print("\n--- Test 19: Pier -> VaultFloor from a spread of arrival speeds ---")
+	var rig := await _load_rig()
+	var arena: Node2D = rig.arena
+	var geometry: ArenaGeometry = rig.geometry
+	var graph: NavGraph = rig.graph
+	arena.match_director.debug_force_open()
+	arena.get_node("MatchDirector").set_physics_process(false)  # see Test 0's reasoning
+	graph.set_gate_open(true)  # redundant after debug_force_open(), kept explicit
+	var body: CharacterBody2D = arena.players[0]
+	var edge: Dictionary = _find_edge(graph, "Pier", "VaultFloor", "drop")
+	if edge.is_empty():
+		_report("Pier->VaultFloor speed spread", "FAIL", "no Pier->VaultFloor drop edge in the graph")
+		await _unload_rig(arena)
+		return
+
+	var pier_aabb: Dictionary = geometry.aabb("Pier")
+	var start_x: float = pier_aabb.center.x
+	var speeds: Array = [0.0, 125.0, 250.0, 375.0, 500.0]
+	var hz := physics_ticks_per_second()
+	var passed := 0
+	for speed in speeds:
+		await _place_and_settle(body, Vector2(start_x, pier_aabb.top - geometry.player_half_h))
+		body.velocity = Vector2(speed, 0.0)   # "side": "right" on this edge - departs east, toward VaultFloor
+		var exec := EdgeExecutor.new(body, geometry, edge)
+		var controller := TestEdgeController.new(exec)
+		body.controller = controller
+		var budget := int(exec.timeout * hz + 90)
+		var t := 0
+		while controller.status == EdgeExecutor.Status.RUNNING and t < budget:
+			await physics_frame
+			t += 1
+		var landed: String = geometry.canonical_platform(body)
+		if controller.status == EdgeExecutor.Status.SUCCESS and landed == "VaultFloor":
+			passed += 1
+			_report("Pier->VaultFloor at arrival speed %.0f" % speed, "PASS", "landed on VaultFloor in %.2fs" % (float(t) / hz))
+		else:
+			_report("Pier->VaultFloor at arrival speed %.0f" % speed, "FAIL", "status=%s landed_on='%s' (expected VaultFloor)" % [controller.status, landed])
+	_report("Pier->VaultFloor speed spread summary", "PASS" if passed == speeds.size() else "FAIL", "%d/%d arrival speeds succeeded" % [passed, speeds.size()])
+	await _unload_rig(arena)
+
+# --- Test 20: 20+ headless bot-only rounds + M3-2 fairness report (Step 5) --
+# docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md S14/S19 Step 5: run the real timed
+# SETUP->UNLOCKING->OPEN->RESULTS loop (not debug_force_open - the scattered-
+# ROAM-then-converge experiment requires the real setup phase to actually
+# elapse) for N rounds with all four slots bot-controlled ("P1 may use a bot
+# controller for this headless fairness experiment only" - approved for this
+# test alone; the real game always gives P1 a HumanController). Runs at the
+# normal time_scale 1.0 - see FAIRNESS_ROUND_TIMEOUT_S's comment for why a
+# speed-up multiplier is deliberately NOT used here. MatchTelemetry (already
+# wired into the live scene) does the actual per-round bookkeeping; this test
+# only drives rounds and prints the aggregate.
+
+const FAIRNESS_ROUNDS := 20
+# time_scale is NOT used to speed this test up, deliberately: at large
+# multipliers each physics tick's delta grows enough (e.g. 8x -> 0.133s/tick)
+# that position-sensitive recipes like Floor->C_M's fixed-trigger jump can
+# overshoot their own ~40px trigger window in a single tick - confirmed live
+# (every bot's Floor->C_M attempt failed at time_scale 8, a pure artifact of
+# coarser physics integration, not a real navigation regression). 1.0/1.25
+# are the only values ever validated for this movement model.
+const FAIRNESS_ROUND_TIMEOUT_S := 40.0   # wall-clock, at time_scale 1.0
+
+func _test_bot_only_fairness_rounds() -> void:
+	print("\n--- Test 20: %d headless bot-only rounds + M3-2 fairness report ---" % FAIRNESS_ROUNDS)
+	var rig := await _load_rig()
+	var arena: Node2D = rig.arena
+	var director: MatchDirector = arena.match_director
+
+	# P1-as-bot, for this headless fairness experiment only. _full_reset()
+	# never touches a HUMAN_LOCAL slot's controller, so this brain/controller
+	# is rebuilt by hand each round below, exactly like arena_01.gd already
+	# does for the three real bot slots.
+	var p1_brain: BotBrain = BotBrain.new(
+		arena.players[0], arena.geometry, arena.nav_graph, 1, arena._round_base_seed(),
+		[arena.players[1], arena.players[2], arena.players[3]],
+		Callable(arena, "_on_bot_hard_recovery"), arena.match_config.curiosity_player_prob, arena.relic.global_position.x
+	)
+	arena.players[0].controller = BotController.new(p1_brain)
+	arena.match_telemetry.reset_aggregate()
+
+	var hz := physics_ticks_per_second()
+	var non_terminating := 0
+	var hard_recoveries_total := 0
+	var completed_rounds := 0
+
+	for round_i in range(FAIRNESS_ROUNDS):
+		var budget := int(FAIRNESS_ROUND_TIMEOUT_S * hz)
+		var ticks := 0
+		var reached_results := false
+		while ticks < budget:
+			await physics_frame
+			ticks += 1
+			if director.state == MatchDirector.State.RESULTS and director.rematch_ready():
+				reached_results = true
+				break
+		if not reached_results:
+			non_terminating += 1
+			_report("Fairness round %d" % (round_i + 1), "FAIL", "did not reach a rematch-ready RESULTS within %.0fs - state='%s'" % [FAIRNESS_ROUND_TIMEOUT_S, director.state])
+			# Force it open so the round still resolves and the run can
+			# continue rather than deadlocking the whole 20-round sweep on
+			# one bad round.
+			if director.state != MatchDirector.State.RESULTS:
+				director.debug_force_open()
+				for _i in range(60):
+					await physics_frame
+		else:
+			completed_rounds += 1
+		for b in arena.brains:
+			if b != null:
+				hard_recoveries_total += b.hard_recovery_count
+		hard_recoveries_total += p1_brain.hard_recovery_count
+		arena._full_reset()
+		# _full_reset() never rebuilds P1's controller (HUMAN_LOCAL slot) -
+		# give it a fresh brain too, for the same reason every real bot slot
+		# gets one: no stale path/blacklist/goal state carried into the next
+		# round, and a fair, non-colliding seed per round.
+		p1_brain = BotBrain.new(
+			arena.players[0], arena.geometry, arena.nav_graph, 1, arena._round_base_seed(),
+			[arena.players[1], arena.players[2], arena.players[3]],
+			Callable(arena, "_on_bot_hard_recovery"), arena.match_config.curiosity_player_prob, arena.relic.global_position.x
+		)
+		arena.players[0].controller = BotController.new(p1_brain)
+
+	_report("Fairness rounds terminate with a winner", "PASS" if non_terminating == 0 else "FAIL", "%d/%d rounds reached RESULTS; %d did not" % [completed_rounds, FAIRNESS_ROUNDS, non_terminating])
+	arena.match_telemetry.print_aggregate_report(non_terminating, hard_recoveries_total)
 	await _unload_rig(arena)

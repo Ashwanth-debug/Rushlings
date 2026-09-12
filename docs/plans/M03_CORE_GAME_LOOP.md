@@ -1,6 +1,6 @@
 # M3 — Core Game Loop
 
-**Status: APPROVED PLAN (2026-09-06). M3-1 COMPLETE / ACCEPTED (2026-09-09). M3-2 NOT STARTED.**
+**Status: M3-1 COMPLETE / ACCEPTED (2026-09-09). M3-2 COMPLETE / ACCEPTED (2026-09-12). MILESTONE 3 — CORE GAME LOOP: COMPLETE.**
 Approved by the Game Director in the M3 planning/audit session, with ten amendments (§0).
 See **§0.5 M3-1 status and playtest log** for what has actually happened since approval —
 this section supersedes the original plan's assumptions wherever a playtest or an
@@ -181,7 +181,38 @@ camping approved as instrumented behaviour; and the convergence/fairness telemet
 
 ---
 
+## 0.8 M3-2 acceptance close-out (2026-09-12)
+
+**Status: ACCEPTED.** Full implementation and playtest record lives in
+`docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md`'s own Step 7 close-out — this entry only marks that
+Milestone 3 as a whole is now closed and points there rather than duplicating it.
+
+**Accepted loop:** `SETUP → UNLOCKING → OPEN → SEEK_RELIC → COLLECTION → RESULTS → REMATCH`.
+Final human playtest confirmed every stage reads clearly, bots visibly switch ROAM→SEEK_RELIC at
+OPEN and physically converge using the accepted M3-1 navigation, human and bots can collect the
+same Relic, RESULTS freezes correctly, and rematch reliably starts a fresh round across repeated
+rounds.
+
+**Setup duration:** 10s is the accepted M3-2 baseline for the current no-powers game. The 15s/25s
+debug options are preserved, not deleted — ~25s remains the M4 working direction once powers give
+the setup phase content.
+
+**Arena 01 roof/east-wall pre-positioning is ACCEPTED as an emergent strategy, not a defect** — see
+`docs/DECISIONS.md` (2026-09-12) for the full finding and the M4 counterplay hypothesis it is
+recorded against.
+
+**M3 — Core Game Loop is COMPLETE.** Next milestone per the existing roadmap: M4 — Powers & Bot
+Intelligence, **not started**, and per the Game Director's own direction, M4 implementation must
+be preceded by a dedicated match-economy design/planning session — see `docs/DECISIONS.md`'s
+"Future match structure" entry (2026-09-12) and `docs/GAME_DESIGN.md`'s corresponding future-
+direction section.
+
+---
+
 # ⛔ READ THIS BEFORE WRITING ANY CODE ⛔
+
+**This banner is now historical.** Milestone 3 (both halves) is complete and accepted — see §0.8
+above. Kept intact below as the record of the approval gate that was actually enforced.
 
 **Milestone 3 is split into two sequential halves separated by a hard human-playtest
 approval gate.**

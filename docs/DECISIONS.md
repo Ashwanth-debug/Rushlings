@@ -785,6 +785,272 @@ still fails. **A clean accepted baseline must return exit code 0.** Also fix `_b
 Band A member list, which omits `A_W_Bridge` and `A_E_Bridge` and therefore reports 38.8% coverage
 instead of the real ~53%.
 
+---
+
+## 2026-09-12 — M3-2 Step 4/5: bot goal switch and fairness telemetry implemented
+
+**Status: ACCEPTED.** Full architecture and results: `docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md` §21
+and the M3-2 Step 4/5 code (`scripts/bot_brain.gd`'s `Goal` enum, `scripts/match_telemetry.gd`).
+
+**Decision:** `BotBrain` gains a `Goal` enum (`ROAM`/`SEEK_RELIC`) orthogonal to its existing
+`State`/`Mode`. At the single authoritative `MatchDirector.state_changed(OPEN)` event, every bot
+brain's `notify_open()` records the request; each brain's own `_check_goal_switch()` — run every
+ROAM tick — performs the actual cancellation (drop executor/path/target) once its own staggered
+reaction delay (0.15/0.30/0.45s, the pre-existing per-slot constants) has elapsed **and** it is
+grounded on a valid graph node, capped at 1.2s (cancel anyway past the cap and let the existing
+stall-ladder/RECOVER machinery handle the rest — no special-casing for mid-transit states). Target
+selection (`_pick_target_for_mode`) returns the constant `"VaultFloor"` whenever `goal ==
+SEEK_RELIC`, overriding whatever ROAM/NAV_STRESS_TEST mode happens to be active — the real match
+objective always wins over a dev toggle. A small new final-approach behaviour
+(`_final_approach_relic`) replaces intra-node wander with a wrap-aware walk to the Relic's real x
+once at `VaultFloor`. No teleporting, no position writes, no physics exemptions — verified by an
+automated per-tick displacement check across every edge type (walk/jump/drop/ladder/launch),
+airborne, and idle-at-various-nodes scenarios (8/8 passed).
+
+**Telemetry:** `scripts/match_telemetry.gd`, a dev-only, print-based node wired permanently into
+the live scene (not test-only) — snapshots every slot at OPEN (node, region, neutral Dijkstra cost
+to the Relic, wrap-aware distance, whether standing on a seal piece) and reports per round (winner,
+OPEN→win time, door used, arrival order, whether the winner had the lowest cost at OPEN, whether
+the winner was on a seal). Reports; never balances.
+
+**Why the goal-switch design matters beyond this milestone:** the "record request, cancel on next
+safe tick" pattern (rather than cancelling synchronously on the event) is what avoids the mid-air
+stale-`current_node` hazard the M3-2 planning audit flagged (A4) — it generalises to any future
+event that needs to redirect a bot mid-action (e.g. a future power interrupting a bot's plan), and
+should be reused rather than re-invented at M4.
+
+---
+
+## 2026-09-12 — Regressions found and fixed during Step 4/5 validation were test-harness-only
+
+**Status: RESOLVED, recorded so it is not re-investigated as a gameplay bug.**
+
+**Finding:** several pre-existing M3-1/Step-1–3 automated tests (`tools/m3_check.gd` tests 1, 4, 5,
+7, 8) call `debug_force_open()` purely to physically/logically unseal the vault for their own
+purposes (so ROAM or an explicit NAV_STRESS_TEST target could use it as an ordinary destination) —
+a usage pattern that predates `SEEK_RELIC`. Once OPEN carried a real behavioural consequence for
+bots, this incidentally hijacked those tests' explicit target-setting, producing ~57 cascading
+failures on first run (bots wandering off to seek the Relic mid-test instead of executing what the
+test asked).
+
+**Fix:** each affected test now calls `brain.reset_goal()` (or the shared
+`_reset_all_goals_to_roam()` helper) immediately after `debug_force_open()`, undoing that one
+incidental side effect. Test 8 additionally disables the Relic's `_physics_process` during its run
+(matching tests 5/7's existing identical reasoning) — one of its own test bodies walks directly
+across the Relic's always-monitoring collection zone en route to a different explicit target, and
+an uncontrolled mid-test collection would freeze every controller and corrupt the test's later
+sub-cases. **None of this touched gameplay code** — only test setup/isolation. Real gameplay
+(`arena_01.gd`'s own `_on_match_state_changed`) never has this problem: it only ever calls
+`notify_open()` in response to a real OPEN, exactly once, with no competing test logic to corrupt.
+
+**Also found and fixed:** the first attempt at test 20 (20-round headless fairness sweep) used
+`Engine.time_scale = 8` to shorten wall-clock runtime, which broke `Floor→C_M`'s fixed-trigger jump
+recipe — at 8× time_scale each physics tick's `delta` grows enough (≈0.133s vs. the normal 0.017s)
+that a body can overshoot the recipe's ~40px trigger window in a single tick, an artifact of
+coarser physics integration, not a real navigation regression (confirmed: every bot's Floor→C_M
+attempt failed identically at time_scale 8, and cleanly at time_scale 1.0). **1.0/1.25 remain the
+only time_scale values ever validated for this movement model** — do not use a larger multiplier to
+speed up a headless simulation; if a long headless test needs to run faster, shorten the scenario,
+don't rescale time.
+
+---
+
+## 2026-09-12 — M3-2 Core Match Loop: COMPLETE / ACCEPTED
+
+**Status: ACCEPTED** by the Game Director after final human playtest. **Accepted loop:**
+`SETUP → UNLOCKING → OPEN → SEEK_RELIC → COLLECTION → RESULTS → REMATCH`.
+
+**Confirmed by playtest:** CLOSED reads clearly as locked; UNLOCKING/the bar lift reads clearly as
+opening; OPEN creates a clear "go" moment; bots visibly switch from ROAM to SEEK_RELIC and
+physically converge using the accepted Arena 01 navigation; human and bots can collect the same
+Relic; the winner state and gameplay freeze work correctly; rematch reliably starts a fresh round;
+repeated rounds work.
+
+**Setup duration — ACCEPTED:** 10 seconds is the accepted M3-2 baseline for the current no-powers
+game. The 15s/25s debug options (`debug_setup_15`/`debug_setup_25`) are preserved, not deleted.
+~25s remains the M4 working direction once powers give the setup phase real content — unchanged
+from the 2026-09-09 "M3-2 setup duration stays unresolved and data-driven" entry, now resolved in
+favour of 10s for the current no-powers baseline specifically.
+
+**`MILESTONE 3 — CORE GAME LOOP` is now COMPLETE** (both M3-1 and M3-2 accepted). Full
+implementation record: `docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md` §21.
+
+---
+
+## 2026-09-12 — Arena 01 roof/east-wall pre-positioning: ACCEPTED as emergent strategy, not a defect
+
+**Status: ACCEPTED.** Confirmed by final M3-2 human playtest.
+
+**Finding:** players and bots can legally pre-position on the Relic vault's roof/header/east-wall
+area during SETUP (P3 was observed waiting on the roof, P4 around the east wall in the accepted
+playtest). When the temporary ceiling/seal opens at OPEN, a correctly positioned player can fall
+directly toward the Relic for a very fast collection — this is the same mechanism the M3-2 plan's
+§06 "roof camping is allowed and instrumented, not designed out" already approved for testing, now
+confirmed as a real, repeatable, human-discovered strategy rather than a theoretical one.
+
+**Decision: do NOT fix this in M3-2.** Treat it as an emergent Arena 01 strategy, not a current
+defect. It is not being removed, blocked, or discouraged by geometry, timing, or rule changes.
+
+**Recorded hypothesis for M4:** future combat/powers may provide natural counterplay to a roof
+camper without any arena change —
+- **Push** may knock a camper off the roof/header before OPEN or immediately after;
+- **Freeze** may disrupt a camper's positioning, or (per the existing environmental-Freeze
+  hypothesis in `docs/GAME_DESIGN.md`) make the header surface itself unreliable to stand on;
+- **shooting/projectiles** may pressure a player holding an obviously advantageous position from
+  range, before they ever need to physically dislodge them;
+- **respawn/combat consequences** may make holding the roof risky rather than free.
+
+**These are M4 hypotheses, not implemented behaviour.** Do not claim powers have "solved" roof
+camping until human playtesting proves it — if roof positioning remains overwhelmingly dominant
+after real counterplay exists in the game, Arena 01 is revisited **then**, not pre-emptively now.
+
+**Future arena design principle, recorded as a lasting direction (also in `docs/GAME_DESIGN.md`):**
+not every future Rushlings arena needs identical objective-access topology to Arena 01. Arena 01
+may keep its roof/pre-positioning strategy as its own character. Future arenas should deliberately
+explore *different* structural problems and strategies — more protected objective chambers,
+portals, moving traversal, changing objective entrances, multiple approach structures, or access
+patterns where camping is deliberately harder — rather than simply copying Arena 01's shape.
+**Arena 02 is not designed by this entry** — this only records the principle for when that
+milestone is planned.
+
+---
+
+## 2026-09-12 — Fairness telemetry from the 20-round bot-only sample: preserved as diagnostic evidence, not acted on
+
+**Status: RECORDED. No balancing action taken or authorised.**
+
+**The sample:** 20 headless, bot-only rounds (P1 bot-controlled for this experiment only — never in
+real gameplay), real timed SETUP→OPEN loop, `tools/m3_check.gd` test 20.
+
+**Results:** P2 won 55% of rounds (P1 10%, P3 20%, P4 15%); median/min/max OPEN→win were all
+~0.00s; nearest-at-OPEN win rate 0%; 0 non-terminating rounds; 0 hard recoveries; door-usage
+telemetry read "unknown" for 90% of arrivals.
+
+**Why the numbers look the way they do, and why they should not be read as a clean fairness
+signal:** tracing the raw run showed that **roof/ceiling fallthrough materially affected results**
+— ordinary Crown-level ROAM routinely carries bots across the vault's permanent header, and the
+instant OPEN removes the seal collision, whoever happens to be up there falls straight through onto
+the Relic before ever approaching through a door. This explains both the near-universal 0.00s
+OPEN→win figure and the "unknown door" majority (a body arriving via ceiling fallthrough never
+takes a tracked Pier/VaultEast edge). **The telemetry under-counts this**: its single OPEN-instant
+position snapshot reads a body mid-fall as `node=air, on_seal=false` rather than crediting a
+roof-camp win, so the reported 10% roof-camp-win rate is a floor on the true rate, not the true
+rate.
+
+**Decision: do not rebalance anything from this sample.** No spawn, geometry, route-cost, or
+bot-difficulty change is authorised by this data, consistent with the standing "route-cost/fairness
+measurement is diagnostic, not normative" principle. **Recorded for later:** improve the
+telemetry's timing resolution (sample across the transition, not only at the instant of it) before
+fairness is treated as a serious tuning task — the current numbers are real evidence of *something*
+happening, but not yet a trustworthy measure of *what fraction* of wins are roof-origin versus
+door-origin.
+
+---
+
+## 2026-09-12 — Known, deferred `tools/m3_check.gd` checker findings (not fixed, not gameplay-blocking)
+
+**Status: RECORDED as a watched, deferred finding. Not fixed. Not treated as a Step 4/5 regression.**
+
+**Finding:** four edge-validation cases fail, each only at one extreme boundary sample position out
+of five tested per edge: `C_Seam→A_E_Bridge` (ladder, 4/5), `A_W_Bridge→Pier` (jump, 4/5),
+`VaultFloor→VaultEast` (jump, 4/5), `VaultEast→A_E` (jump, 3/5). The failing samples for the two
+vault edges show an implausibly fast (~0.07s) transition straight to the recipe's final "steer"
+phase, consistent with the body starting embedded in or immediately against the destination
+platform's own wall at that exact sample x — a checker-sampling edge case at a wall boundary, not
+something a bot's own approach logic would ever produce (a real approach decelerates and stops
+short of the wall before jumping; only the checker's exhaustive positional sweep places a body
+already touching it).
+
+**Why this is recorded as pre-existing, not a Step 4/5 regression:** these are raw `EdgeExecutor`
+mechanics tests (`TestEdgeController`, bypassing `BotBrain` entirely) — the goal-switch code this
+session added is never on this call path. The identical failure signature (same edges, same
+sample positions, same symptom) was present on the very first run of `tools/m3_check.gd` this
+session, before any Step 4/5 fix was applied, and is unchanged across every subsequent run.
+
+**Why it is not being fixed now:** per the standing rule, do not silently patch M3-1
+geometry/navigation or `EdgeExecutor` recipes without explicit Director direction. Real gameplay
+evidence — 20/20 real fairness rounds (test 20) terminating cleanly with 0 hard recoveries, using
+these same edges under real SEEK_RELIC load — indicates this checker-sampling artifact does not
+block real play. If it is ever reproduced as an actual in-game stuck/failure state (not merely a
+checker sample), it should be investigated then with that evidence, not pre-emptively now.
+
+---
+
+## 2026-09-12 — Future match structure: an escalating ~2-minute match with in-match power progression (Hypothesis, Not Approved)
+
+**Status: RECORDED as a future product/game-design direction. Nothing here is implemented. Does
+not change M3's accepted loop, which stays the current prototype validating movement, arena
+navigation, objective convergence, collection, winner and rematch — this entry does not rewrite it.**
+
+**The core hypothesis:** the intended Rushlings match may eventually be an escalating experience
+rather than the current short countdown-then-Relic-race being the final game structure:
+
+```
+MATCH START
+     ↓
+EARLY GAME — BUILD        (explore / collect / weak interactions)
+     ↓
+MID GAME — ESCALATE       (stronger abilities / more encounters / positioning)
+     ↓
+LATE GAME — BATTLE/OBJECTIVE CLIMAX   (stronger attacks / interference / Relic contest)
+     ↓
+WINNER
+```
+
+Players would not begin a round at their strongest — they would explore, collect powers/
+resources, and choose which powers to pursue, encountering and interfering with others along the
+way and potentially avoiding fights while building strength, before the match escalates toward the
+Relic climax.
+
+**Approximate timing hypothesis, NOT approved:** roughly a 2-minute total match, with
+approximately the first half weighted toward building capability and the second half toward
+combat/objective intensity. **Do not encode exactly 60s/60s/120s as production rules** — these are
+hypotheses to prototype and playtest, not settled numbers.
+
+**In-match power progression (hypothesis):** collected resources/powers could increase what a
+player is capable of *within the same match* — stronger Push, stronger Freeze, a larger
+projectile/blast radius, additional charges, a stronger Shield, upgraded movement/traversal, or
+other evolutions. These are illustrative examples, not an approved upgrade tree. The important
+principle: **power should be earned/buildable during the match, not universally available at
+maximum strength from t=0.**
+
+**Different viable player strategies (behavioural hypotheses, not fixed classes — do not create
+character classes now):** an Aggressor who fights/interferes early; a Builder who avoids
+unnecessary fights and collects/upgrades; an Opportunist who steals pickups or attacks weakened
+players; an Objective-focused player who prepares specifically for the Relic opening.
+
+**Combat is not necessarily excluded from the early game.** The first half should not necessarily
+be a safe collection phase — players may still attack, Push, Freeze, disrupt, steal opportunities,
+and potentially eliminate/respawn each other early. The intended change is that overall power level
+and intensity **grow through the match**, not that the early game is combat-free.
+
+**The strategic tension this creates (a major future design space, not resolved here):** a player
+who spends more time collecting/upgrading may become stronger later but risks losing positional
+advantage, being attacked while collecting, missing contested resources, or being poorly
+positioned when the objective changes. A player who fights constantly may gain immediate control
+but potentially enter the late game less upgraded.
+
+**Relationship to the Arena 01 roof strategy:** the roof/east-wall pre-positioning strategy
+accepted above should be **revisited under this future combat system**, not removed now — future
+powers/projectiles/Push/Freeze may turn a camping position into a contestable strategic location
+rather than a free advantage. This must be human-playtested when that system exists, not assumed.
+
+**Relationship to future arenas:** arena design and the power/resource economy should eventually be
+designed *together* — power/resource locations, high-value hard-to-reach spaces, combat
+chokepoints, safe/risky collection routes, objective access, portals/traversal, and high ground are
+all part of the same future design space. Not designed now.
+
+**M4 planning implication — binding on the next planning session:** do NOT treat M4 as simply
+"implement Push, Freeze, Shield and shooting." **A fresh design/planning milestone must happen
+before M4 implementation** to define: the match economy; what players collect; how powers are
+acquired; inventory/carry rules; whether powers have levels; the upgrade/progression model; power
+spawning/distribution and scarcity; death/respawn; what a kill accomplishes; whether players drop
+resources on death; the shooting/projectile model; escalation over match time; the relationship
+between combat and the Relic; when/how the Relic becomes available under this new structure;
+comeback mechanics if needed; and how bots should reason about collecting vs. fighting vs. the
+objective. **None of this is implemented or approved by this entry** — it is preserved as the
+future direction to plan against.
+
 **Why:** the tool currently exits non-zero on the accepted M2 baseline because of that one
 deliberately-unfixed finding, which makes it useless as an M3 regression gate — a new failure is
 indistinguishable from the old one. `B_Under` itself is **not** to be fixed; it is a confirmed

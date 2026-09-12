@@ -42,13 +42,15 @@ Milestone 2 — Greybox Arena (Arena 01 V2, "The Gallery"): COMPLETE / ACCEPTED 
 - Full record: `docs/plans/M02_ARENA_01_V2.md` and the M2 entries in `docs/DECISIONS.md` (2026-09-06).
 - The Movement Lab (`scenes/movement_lab/`) is retained as a separate regression harness.
 
-Milestone 3-1 — Four-Player Foundation: COMPLETE / ACCEPTED (2026-09-09). Milestone 3-2 — Core Match Loop: PLAN APPROVED (2026-09-09), IMPLEMENTATION NOT STARTED.
+Milestone 3-1 — Four-Player Foundation: COMPLETE / ACCEPTED (2026-09-09). Milestone 3-2 — Core Match Loop: COMPLETE / ACCEPTED (2026-09-12). **MILESTONE 3 — CORE GAME LOOP: COMPLETE.**
 - Four player slots (P1 human, P2–P4 bots), a controller abstraction (`scripts/player_controller.gd`, `human_controller.gd`, `bot_controller.gd`), and a hand-authored nav graph + Dijkstra (`scripts/nav_graph.gd`, `nav_path.gd`, `edge_executor.gd`, `bot_brain.gd`) drive bot navigation with real M1 physics — no teleport cheating.
 - `Floor→C_M` is the one dependable, RELIABLE bot road up from the ground (a purpose-built fixed-trigger recipe with a bounded reposition/build-runway safety behaviour); `Floor→C_W`/`Floor→C_Seam` are SKILL/human-only by design — see `docs/DECISIONS.md` (2026-09-08).
-- `tools/m3_check.gd` (including NAV STRESS mode) is the permanent M3 navigation regression tool, alongside `tools/arena_check.gd`. Both must pass before any future navigation change.
+- `tools/m3_check.gd` (including NAV STRESS mode) is the permanent M3 navigation regression tool, alongside `tools/arena_check.gd`. Both must pass before any future navigation change — 4 known, deferred edge-sampling findings remain (checker-boundary artifacts predating M3-2 Step 4/5, unrelated to bot decision logic; see `docs/DECISIONS.md`, 2026-09-12) and are documented, not silently patched.
 - Player↔player collision is OFF by default (dev toggle available); 1.0× is the accepted multiplayer tempo baseline.
-- Full record: `docs/plans/M03_CORE_GAME_LOOP.md` (§0.5–§0.6) and the M3-1 entries in `docs/DECISIONS.md` (2026-09-06 through 2026-09-09).
-- **M3-2 (setup timer, functional gate, Relic collection, winner, rematch) has an APPROVED PLAN but NO IMPLEMENTATION** — no gameplay code, scene, script, test or project setting exists for it. The authority is `docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md`, which supersedes Part Two (§11) of `docs/plans/M03_CORE_GAME_LOOP.md` wherever they differ (see that file's §0.7 for the supersession table). Work from the new plan's §19 order: begin at **Step 0** (re-run both checkers) and **stop at STOP 1**, which builds the gate only — physical CLOSED seal, existing bars in CLOSED position, a debug-key-driven bars-lift prototype, minimal anti-bypass collision. The MatchDirector loop, SEEK_RELIC, winner, results, rematch and fairness logic must not be built until the Game Director approves STOP 1 by visual inspection.
+- **The accepted M3-2 match loop:** `SETUP → UNLOCKING → OPEN → SEEK_RELIC → COLLECTION → RESULTS → REMATCH`. 10s is the accepted setup-duration baseline for the current no-powers game (15s/25s remain as debug options, not deleted; ~25s stays the M4 direction once powers exist). Bots switch `ROAM → SEEK_RELIC` at OPEN via `BotBrain.Goal` and converge on the Relic using accepted M3-1 navigation; `scripts/match_telemetry.gd` is permanent dev-only, print-based convergence/fairness telemetry.
+- **Arena 01's roof/east-wall pre-positioning is ACCEPTED as an emergent strategy, not a defect** — a player who legally pre-positions on the vault header/roof before OPEN can fall directly onto the Relic. Not fixed in M3-2; recorded as an M4 counterplay hypothesis (Push/Freeze/projectiles/respawn) to be human-playtested, not assumed solved. See `docs/DECISIONS.md` (2026-09-12).
+- Full record: `docs/plans/M03_CORE_GAME_LOOP.md` (§0.5–§0.8), `docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md` (§21 close-out), and the M3-1/M3-2 entries in `docs/DECISIONS.md` (2026-09-06 through 2026-09-12).
+- **The Game Director's "Future match structure" vision** (an escalating ~2-minute match with in-match power progression, recorded in `docs/GAME_DESIGN.md` §25 and `docs/DECISIONS.md`, 2026-09-12) is a hypothesis for M4+, not implemented. **M4 must not be treated as simply "implement Push, Freeze, Shield and shooting"** — a dedicated match-economy design/planning session is required before M4 implementation begins.
 
 ## Core Product Principle
 Do not build the beautiful game first. Build the smallest ugly playable game that proves the mechanic is fun.
@@ -101,7 +103,7 @@ These are intentionally hard constraints unless explicitly revisited:
 - Baseline mode has no elimination/ghost system. Hazards cause short respawn.
 - Ghost gameplay is reserved as a possible future mode.
 - The baseline objective is simple: be the first to grab the Relic.
-- Relic is unavailable/locked at match start, then opens automatically after a short setup period (current working value: ~25 seconds; tune through playtesting).
+- Relic is unavailable/locked at match start, then opens automatically after a short setup period (accepted M3-2 baseline: 10 seconds, for the current no-powers game; 15s/25s remain as debug options; ~25s stays the M4 direction once powers exist).
 - No multi-seal unlocking system in baseline mode.
 - No “hold Relic for 10 seconds” requirement in baseline mode.
 - Maximum round target is around 2 minutes, but a round may end earlier.
@@ -221,8 +223,8 @@ It is done when:
 6. A Git checkpoint is created/pushed when requested.
 
 ## Immediate Next Milestone
-Milestone 3-2 — Core Match Loop (setup timer, functional gate, Relic collection, winner, rematch), on top of the accepted M3-1 four-player foundation. **The plan is approved; the implementation has not started.**
-Do not implement automatically just because this file is read. First read `docs/ROADMAP.md`, **`docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md`** (the M3-2 authority), `docs/plans/M03_CORE_GAME_LOOP.md` §0.7 (what it supersedes), and the 2026-09-09 entries in `docs/DECISIONS.md`; inspect the project; then follow the approved plan's §19 implementation order, halting at each STOP point for Game Director approval.
+Milestone 3 — Core Game Loop (both M3-1 and M3-2) is **COMPLETE / ACCEPTED**. The next milestone per `docs/ROADMAP.md` is **Milestone 4 — Powers & Bot Intelligence**, **not started**.
+**Do not implement M4 automatically just because this file is read, and do not treat M4 as simply "implement Push, Freeze, Shield and shooting."** Per the Game Director's own direction (`docs/DECISIONS.md`, 2026-09-12; hypothesis detail in `docs/GAME_DESIGN.md` §25), a dedicated match-economy design/planning session must happen **before** any M4 power implementation begins — covering what players collect, how powers are acquired/leveled, scarcity, death/respawn, the shooting/projectile model, escalation over match time, and how bots should reason about collecting vs. fighting vs. the objective. First read `docs/ROADMAP.md`'s M4 section, `docs/GAME_DESIGN.md` §25, and the 2026-09-12 entries in `docs/DECISIONS.md`; inspect the project; then plan that design session with the Game Director before writing any M4 gameplay code.
 
 ## Documentation Deliverables
 Milestone plans, audits and reports are written into `docs/` — for milestone work, `docs/plans/` — as a Markdown file (the version a future session reads) and, when the Game Director wants a review copy, an accompanying Word `.docx`. Do not deliver plans as external links; the repository must stay self-sufficient. If both formats exist for one document, the Markdown is authoritative. Note `python-docx` is not installed globally on this machine — install it into the session scratchpad to generate a `.docx`.

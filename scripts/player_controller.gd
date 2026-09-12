@@ -11,6 +11,16 @@ extends RefCounted
 # no-op (Input already reflects the frame's state); BotController's is where
 # the bot actually decides what to do next.
 
+## M3-2 Step 3 (approved S12): RESULTS freezes gameplay by freezing
+## controllers, not SceneTree.paused or Engine.time_scale - see
+## docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md S12. A frozen controller reports
+## zero intent; player.gd's own _physics_process keeps running unmodified, so
+## gravity/move_and_slide still settle bodies naturally.
+var frozen: bool = false
+
+func set_frozen(f: bool) -> void:
+	frozen = f
+
 func update(_delta: float) -> void:
 	pass
 

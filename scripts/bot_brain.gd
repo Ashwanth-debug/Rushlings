@@ -8,6 +8,14 @@ extends RefCounted
 
 enum State { ROAM, RECOVER }
 
+# M3-2 Step 4 (docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md S08): the match
+# objective, orthogonal to State/Mode above - ROAM is M3-1's roaming
+# behaviour, SEEK_RELIC is the OPEN-triggered rush. A goal switch never
+# invents a third State; it reuses ROAM's entire executor/path/recovery
+# machinery unchanged, only _decide_next()'s target selection differs -
+# exactly the same shape as the NORMAL_ROAM/NAV_STRESS_TEST Mode split above.
+enum Goal { ROAM, SEEK_RELIC }
+
 # Nav stress-test mode (Director feedback, iteration 4): "can a bot reliably
 # reach an explicit destination anywhere in the arena" replaces "does bots
 # roam intelligently" as the thing M3-1 validation actually needs to prove.
@@ -97,10 +105,27 @@ var slot_index: int
 var other_bodies: Array
 var hard_recovery_callback: Callable
 var curiosity_player_prob: float
+## The Relic's real world x, read once at construction (arena_01.gd passes
+## the live Relic Area2D's global_position.x - see S10's "final approach").
+## Defaulted to the Relic's authored centre (980-1020) so a rig with no live
+## Relic node (none of the pre-Step-5 tests construct one directly) still
+## gets a sane value.
+var relic_x: float = 1000.0
 
 var rng := RandomNumberGenerator.new()
 var state: State = State.ROAM
 var mode: Mode = Mode.NORMAL_ROAM
+var goal: Goal = Goal.ROAM
+var goal_dirty: bool = false
+var _goal_dirty_since: float = 0.0
+## Dev/telemetry only (S14): when this bot first arrived at VaultFloor while
+## pursuing SEEK_RELIC, in brain-clock seconds; -1 until then. Reset by
+## reset_goal()/a fresh BotBrain instance, never by the goal switch itself.
+var seek_relic_arrived_at: float = -1.0
+## Dev/telemetry only (S14 "door used ... inferred from the last edge taken
+## for a bot"): "west" (arrived via Pier) or "east" (via VaultEast), "" if
+## this bot has never completed an edge landing on VaultFloor.
+var last_relic_door: String = ""
 var current_node: String = ""
 var target_node: String = ""
 var path: Array = []
@@ -151,7 +176,7 @@ var horizontal_intent: float = 0.0
 var vertical_intent: float = 0.0
 var _pending_jump: bool = false
 
-func _init(p_body: CharacterBody2D, p_geometry: ArenaGeometry, p_graph: NavGraph, p_slot_index: int, match_seed: int, p_other_bodies: Array, p_hard_recovery_callback: Callable, p_curiosity_player_prob: float = 0.25) -> void:
+func _init(p_body: CharacterBody2D, p_geometry: ArenaGeometry, p_graph: NavGraph, p_slot_index: int, match_seed: int, p_other_bodies: Array, p_hard_recovery_callback: Callable, p_curiosity_player_prob: float = 0.25, p_relic_x: float = 1000.0) -> void:
 	body = p_body
 	geometry = p_geometry
 	graph = p_graph
@@ -159,6 +184,7 @@ func _init(p_body: CharacterBody2D, p_geometry: ArenaGeometry, p_graph: NavGraph
 	other_bodies = p_other_bodies
 	hard_recovery_callback = p_hard_recovery_callback
 	curiosity_player_prob = p_curiosity_player_prob
+	relic_x = p_relic_x
 
 	rng.seed = match_seed + slot_index
 	var row: int = slot_index % DECISION_INTERVALS.size()
@@ -242,6 +268,64 @@ func current_stress_destination() -> String:
 	var dest: String = stress_sequence[stress_index % stress_sequence.size()]
 	return STRESS_DEST_LABELS.get(dest, dest)
 
+## The OPEN-triggered goal switch (S08). Does NOT cancel anything itself -
+## it only records that a switch is wanted and when it was requested.
+## _check_goal_switch(), run every ROAM tick, performs the actual
+## cancellation once this bot's own reaction delay has elapsed AND it is
+## grounded on a valid node (capped at GOAL_SWITCH_GROUND_CAP). Idempotent:
+## a second call while already SEEK_RELIC (e.g. a stray extra signal) is a
+## no-op, never re-arming goal_dirty or resetting the staggered timer.
+func notify_open() -> void:
+	if goal == Goal.SEEK_RELIC:
+		return
+	goal = Goal.SEEK_RELIC
+	goal_dirty = true
+	_goal_dirty_since = _clock
+
+## Reverts to plain ROAM (arena_01.gd calls this on every transition back to
+## SETUP - a real rematch already gets a brand-new BotBrain where this is a
+## no-op, but the debug_setup_10/15/25 keys reset MatchDirector alone without
+## rebuilding brains, and a bot must not carry SEEK_RELIC into a freshly
+## re-sealed vault). Same cancellation shape as set_mode()/notify_open().
+func reset_goal() -> void:
+	if goal == Goal.ROAM and not goal_dirty:
+		return
+	goal = Goal.ROAM
+	goal_dirty = false
+	target_node = ""
+	path = []
+	path_index = 0
+	executor = null
+	seek_relic_arrived_at = -1.0
+	last_relic_door = ""
+	decision_clock = min(decision_clock, 0.1)
+
+## Approved cancel-on-ground re-path (S08): fires on the first ROAM tick
+## where BOTH this bot's own reaction_delay has elapsed AND it is grounded on
+## a real graph node - re-localising from actual physical footing, never a
+## stale mid-air current_node. Capped at GOAL_SWITCH_GROUND_CAP: if still not
+## grounded by then, cancel anyway and let the stall ladder/RECOVER handle
+## whatever physical state that leaves the body in - no special-casing for
+## mid-transit states, exactly as approved. Edge blacklists (blocked_until)
+## are deliberately untouched - S08's "leave it" instruction.
+const GOAL_SWITCH_GROUND_CAP := 1.2
+
+func _check_goal_switch() -> void:
+	if not goal_dirty:
+		return
+	var elapsed: float = _clock - _goal_dirty_since
+	if elapsed < reaction_delay:
+		return
+	var grounded_valid: bool = body.is_on_floor() and _invalid_platform == "" and current_node != "" and graph.nodes.has(current_node)
+	if grounded_valid or elapsed >= GOAL_SWITCH_GROUND_CAP:
+		goal_dirty = false
+		executor = null
+		path = []
+		path_index = 0
+		target_node = ""
+		decision_clock = min(decision_clock, 0.1)
+		print("[BotBrain] slot %d: goal switch -> SEEK_RELIC (reacted at %.2fs, grounded=%s, node='%s')" % [slot_index, elapsed, grounded_valid, current_node])
+
 func consume_jump_intent() -> bool:
 	var j := _pending_jump
 	_pending_jump = false
@@ -280,6 +364,12 @@ func debug_state() -> String:
 
 func _tick_roam(delta: float) -> void:
 	_update_localization()
+	# Checked before the _invalid_platform early-return, deliberately: the
+	# GOAL_SWITCH_GROUND_CAP must keep counting down even if this exact bot
+	# happens to be sitting on unrecognised geometry when OPEN fires, or a
+	# rare-but-possible combination of the two bugs could wedge goal_dirty
+	# open indefinitely.
+	_check_goal_switch()
 	if _invalid_platform != "":
 		# Deterministic nudge off unrecognised geometry - never teleport.
 		# Direction is fixed per bot (not re-randomised each tick) so it
@@ -301,7 +391,15 @@ func _tick_roam(delta: float) -> void:
 		_decide_next()
 		if not path.is_empty():
 			return
-	_intra_node_wander()
+	# S10 final approach: VaultFloor is too low a chamber to jump inside, and
+	# _intra_node_wander()'s random x would have the bot drift away from the
+	# Relic instead of collecting it - a pure walk toward the Relic's actual
+	# (wrap-aware) x, holding once close enough for the Relic's own Area2D
+	# overlap to do the rest.
+	if goal == Goal.SEEK_RELIC and current_node == "VaultFloor":
+		_final_approach_relic()
+	else:
+		_intra_node_wander()
 
 # Only accepts a landing as current_node if it is a real nav-graph node -
 # the root cause found for a bot silently going idle (Problem 2): landing on
@@ -340,12 +438,22 @@ func _drive_executor(delta: float) -> void:
 			completed_edge_types[done_edge.type] = completed_edge_types.get(done_edge.type, 0) + 1
 			current_node = path[path_index].to
 			_mark_visited(current_node)
+			# S14 telemetry: which door this bot's most recent VaultFloor
+			# arrival used - inferred from the edge that just landed it there,
+			# per the plan's own instruction ("last edge taken for a bot").
+			if current_node == "VaultFloor":
+				if done_edge.from == "Pier":
+					last_relic_door = "west"
+				elif done_edge.from == "VaultEast":
+					last_relic_door = "east"
 			path_index += 1
 			executor = null
 			if path_index >= path.size():
 				path = []
 				if current_node == target_node:
 					target_node = ""
+					if goal == Goal.SEEK_RELIC and current_node == "VaultFloor" and seek_relic_arrived_at < 0.0:
+						seek_relic_arrived_at = _clock
 					if mode == Mode.NAV_STRESS_TEST:
 						stress_arrivals += 1
 						stress_arrived_nodes[current_node] = stress_arrived_nodes.get(current_node, 0) + 1
@@ -441,7 +549,7 @@ func _stage3_relocalize_new_region() -> void:
 
 func _decide_next() -> void:
 	if target_node == "" or target_node == current_node:
-		var picked := _pick_stress_target() if mode == Mode.NAV_STRESS_TEST else _pick_interest_target()
+		var picked := _pick_target_for_mode()
 		if picked == current_node or picked == "":
 			# Confirmed regression: in NAV_STRESS_TEST, a sequence entry that
 			# happens to already equal the bot's current node (its own spawn
@@ -451,18 +559,29 @@ func _decide_next() -> void:
 			# path skip used to move the index forward, the bot re-offered
 			# the same trivially-already-satisfied destination forever and
 			# never got credit for it or moved on to the next one.
-			if mode == Mode.NAV_STRESS_TEST and picked == current_node and picked != "":
+			if goal == Goal.ROAM and mode == Mode.NAV_STRESS_TEST and picked == current_node and picked != "":
 				stress_arrivals += 1
 				stress_arrived_nodes[current_node] = stress_arrived_nodes.get(current_node, 0) + 1
 				print("[BotBrain] slot %d: nav stress test already at '%s' (%d/%d in sequence)" % [slot_index, current_node, (stress_index % stress_sequence.size()) + 1, stress_sequence.size()])
 				stress_index += 1
 				decision_clock = min(decision_clock, 0.1)
+			# S14 telemetry: the bot was already standing on VaultFloor the
+			# instant SEEK_RELIC was set (e.g. OPEN fired while it happened to
+			# be there) - record the arrival exactly like a completed-edge
+			# arrival does in _drive_executor, so this case is not silently
+			# missing from the fairness data.
+			if goal == Goal.SEEK_RELIC and picked == "VaultFloor" and picked == current_node and seek_relic_arrived_at < 0.0:
+				seek_relic_arrived_at = _clock
 			target_node = current_node
-			wander_target_x = _random_wander_x(current_node)
+			if not (goal == Goal.SEEK_RELIC and current_node == "VaultFloor"):
+				wander_target_x = _random_wander_x(current_node)
 			return
 		target_node = picked
 	var new_path: Array = NavPath.shortest_path(graph, current_node, target_node, _weighted_cost)
 	if new_path.is_empty():
+		if goal == Goal.SEEK_RELIC and target_node == "VaultFloor":
+			_seek_relic_fallback_path()
+			return
 		if mode == Mode.NAV_STRESS_TEST:
 			# No reliable route to this destination from here right now
 			# (e.g. it was reached via a skill edge that just failed and is
@@ -474,6 +593,49 @@ func _decide_next() -> void:
 	else:
 		path = new_path
 		path_index = 0
+
+## Which target-selection policy is active - goal (the real match objective)
+## always wins over mode (a dev-only ROAM/NAV_STRESS_TEST toggle): SEEK_RELIC
+## means the match is racing to the Relic regardless of what debug mode
+## happens to be set.
+func _pick_target_for_mode() -> String:
+	if goal == Goal.SEEK_RELIC:
+		return "VaultFloor"
+	return _pick_stress_target() if mode == Mode.NAV_STRESS_TEST else _pick_interest_target()
+
+## Approved S08 fallback: "if [Dijkstra] returns empty - which should be
+## impossible, but the code must not assume so - fall back to a route toward
+## the nearest of Pier / A_E and retry next tick." Once at either door, the
+## next _decide_next() cycle asks for VaultFloor again, now one gated hop
+## away instead of a whole-arena route - a bot cannot get permanently stuck
+## on this path just because the direct route momentarily failed.
+func _seek_relic_fallback_path() -> void:
+	var pier_path: Array = NavPath.shortest_path(graph, current_node, "Pier", _weighted_cost)
+	var ae_path: Array = NavPath.shortest_path(graph, current_node, "A_E", _weighted_cost)
+	var use_pier: bool = not pier_path.is_empty() and (ae_path.is_empty() or pier_path.size() <= ae_path.size())
+	if use_pier:
+		path = pier_path
+		path_index = 0
+		target_node = "Pier"
+	elif not ae_path.is_empty():
+		path = ae_path
+		path_index = 0
+		target_node = "A_E"
+	else:
+		target_node = ""
+
+const RELIC_ARRIVAL_TOL := 8.0
+
+## S10 final approach, the one new behaviour SEEK_RELIC adds beyond reusing
+## ROAM's machinery: a pure wrap-aware walk toward the Relic's real x, no
+## jump (the 84px alcove is too low), holding once close enough that the
+## Relic's own Area2D overlap resolves the actual collection.
+func _final_approach_relic() -> void:
+	var diff: float = geometry.shortest_diff(relic_x, body.global_position.x)
+	if abs(diff) < RELIC_ARRIVAL_TOL:
+		horizontal_intent = 0.0
+	else:
+		horizontal_intent = 1.0 if diff > 0.0 else -1.0
 
 ## The next node in this bot's explicit destination sequence, or "" once the
 ## whole sequence has looped back around past its own length once - a run
@@ -495,6 +657,12 @@ func _weighted_cost(edge: Dictionary) -> float:
 	# disconnects a region, NavPath.shortest_path returns [] and _decide_next
 	# reports it rather than quietly routing through something known-bad.
 	if edge.get("route_class", NavGraph.RouteClass.RELIABLE) != NavGraph.RouteClass.RELIABLE:
+		return INF
+	# M3-2 Step 2 (S07): while the vault is sealed, its five interior edges
+	# are excluded from Dijkstra exactly like a SKILL/INVALID edge - INF, not
+	# merely penalised, so a ROAM bot never attempts to walk into physically
+	# blocked collision. graph.gate_open flips true again at OPEN.
+	if edge.get("gated", false) and not graph.gate_open:
 		return INF
 	var w: float = edge_type_weight.get(edge.type, 1.0)
 	var extra: float = level_change_penalty if (edge.type == "ladder" or edge.type == "launch") else 0.0

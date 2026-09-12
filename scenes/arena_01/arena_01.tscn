@@ -7,6 +7,11 @@
 [ext_resource type="Script" uid="uid://b61x8v01qofvk" path="res://scripts/arena_01.gd" id="5"]
 [ext_resource type="Script" uid="uid://7fm5yiq01sn0" path="res://scripts/arena_wrap.gd" id="6"]
 [ext_resource type="Script" uid="uid://bg2ordkglqjc1" path="res://scripts/seam_mirror.gd" id="7"]
+[ext_resource type="Script" path="res://scripts/relic_gate.gd" id="8"]
+[ext_resource type="Script" path="res://scripts/match_director.gd" id="9"]
+[ext_resource type="Script" path="res://scripts/match_hud.gd" id="10"]
+[ext_resource type="Script" path="res://scripts/relic.gd" id="11"]
+[ext_resource type="Script" path="res://scripts/match_telemetry.gd" id="12"]
 
 [sub_resource type="RectangleShape2D" id="FloorShape"]
 size = Vector2(2120, 120)
@@ -56,8 +61,17 @@ size = Vector2(184, 40)
 [sub_resource type="RectangleShape2D" id="VaultGateWShape"]
 size = Vector2(40, 160)
 
+[sub_resource type="RectangleShape2D" id="VaultSealWShape"]
+size = Vector2(102, 40)
+
+[sub_resource type="RectangleShape2D" id="VaultSealEShape"]
+size = Vector2(80, 40)
+
 [sub_resource type="RectangleShape2D" id="CSeamShape"]
 size = Vector2(600, 40)
+
+[sub_resource type="RectangleShape2D" id="RelicShape"]
+size = Vector2(40, 60)
 
 [sub_resource type="RectangleShape2D" id="BSeamShape"]
 size = Vector2(360, 40)
@@ -298,6 +312,32 @@ offset_right = 86.0
 offset_bottom = 20.0
 color = Color(0.42, 0.42, 0.5, 1)
 
+[node name="VaultSealW" type="StaticBody2D" parent="Geometry" unique_id=2201847360]
+position = Vector2(871, 356)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Geometry/VaultSealW" unique_id=2201847361]
+shape = SubResource("VaultSealWShape")
+
+[node name="ColorRect" type="ColorRect" parent="Geometry/VaultSealW" unique_id=2201847362]
+offset_left = -51.0
+offset_top = -20.0
+offset_right = 51.0
+offset_bottom = 20.0
+color = Color(0.42, 0.42, 0.5, 1)
+
+[node name="VaultSealE" type="StaticBody2D" parent="Geometry" unique_id=2201847370]
+position = Vector2(1120, 356)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Geometry/VaultSealE" unique_id=2201847371]
+shape = SubResource("VaultSealEShape")
+
+[node name="ColorRect" type="ColorRect" parent="Geometry/VaultSealE" unique_id=2201847372]
+offset_left = -40.0
+offset_top = -20.0
+offset_right = 40.0
+offset_bottom = 20.0
+color = Color(0.42, 0.42, 0.5, 1)
+
 [node name="SeamMirror" type="Node2D" parent="Geometry" unique_id=1716845508]
 script = ExtResource("7")
 
@@ -412,8 +452,23 @@ offset_top = 400.0
 offset_right = 1020.0
 offset_bottom = 460.0
 color = Color(0.85, 0.75, 0.25, 1)
+modulate = Color(0.45, 0.45, 0.45, 1)
+
+[node name="MatchDirector" type="Node" parent="." unique_id=3050112233]
+script = ExtResource("9")
+
+[node name="Relic" type="Area2D" parent="." unique_id=3050112240]
+position = Vector2(1000, 430)
+script = ExtResource("11")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Relic" unique_id=3050112241]
+shape = SubResource("RelicShape")
+
+[node name="MatchTelemetry" type="Node" parent="." unique_id=3050112250]
+script = ExtResource("12")
 
 [node name="RelicGate" type="Node2D" parent="." unique_id=1469229969]
+script = ExtResource("8")
 
 [node name="Bar1" type="ColorRect" parent="RelicGate" unique_id=17330297]
 offset_left = 927.0
@@ -480,3 +535,13 @@ offset_right = 420.0
 offset_bottom = 160.0
 script = ExtResource("4")
 player_path = NodePath("../../PlayerSlots/Slot1")
+
+[node name="MatchLabel" type="Label" parent="HUD" unique_id=3050112234]
+offset_left = 700.0
+offset_top = 20.0
+offset_right = 1220.0
+offset_bottom = 80.0
+theme_override_font_sizes/font_size = 36
+horizontal_alignment = 1
+script = ExtResource("10")
+director_path = NodePath("../../MatchDirector")
