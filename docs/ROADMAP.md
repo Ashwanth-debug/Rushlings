@@ -430,7 +430,7 @@ produce schedule surprise.
 
 **M4-0 — Match Shape Design: [x] COMPLETE / APPROVED (2026-09-12).**
 **M4-1 — Contact: [x] COMPLETE / ACCEPTED (2026-09-12).** Full record: `docs/DECISIONS.md`.
-**M4-2 — The Arena Bites: [ ] NEXT, PLANNED / NOT STARTED.**
+**M4-2 — The Arena Bites: [x] COMPLETE / ACCEPTED (2026-09-13).** Full record: `docs/DECISIONS.md`.
 
 ## Authority
 **`docs/plans/M04_0_MATCH_SHAPE_DESIGN.md` is the authority for this phase** and supersedes any
@@ -473,7 +473,7 @@ Full detail in `docs/GAME_DESIGN.md` §7A, §8A, §10, §11.
 |---|---|---|---|
 | **M4-0** Match Shape Design | **[x] COMPLETE / APPROVED** | *What is a Rushlings match?* | The design document. No code. |
 | **M4-1** Contact | **[x] COMPLETE / ACCEPTED (2026-09-12)** | **Does hurting each other feel good?** | Push + Rocket + Freeze · one-use, carry-one, pickup · 3-pip health · defeat → spill → respawn · minimal safe-respawn · protection-window prototype. **Damage-model amendment: all three powers now deal 1 pip on hit, not just Rocket** — see `docs/DECISIONS.md`. No Relic change, no hazards, no long match. |
-| **M4-2** The Arena Bites | **[ ] NEXT** | **Does arena-as-opponent improve the game?** | Escalating danger zones with a mandatory warning → active → safe cycle. First real test of Push-is-displacement-only (now also Push-deals-1-pip, per the M4-1 amendment). Determines how important environmental damage should become. |
+| **M4-2** The Arena Bites | **[x] COMPLETE / ACCEPTED (2026-09-13)** | **Does arena-as-opponent improve the game?** | Escalating danger zones with a mandatory warning → active → safe cycle. First real test of Push-is-displacement-only (now also Push-deals-1-pip, per the M4-1 amendment). |
 | **M4-3** The Climax | [ ] Not started | **Does carry-to-locked-extraction produce a great ending?** | Relic carry · five authored region anchors · selected once and locked for the round · drop-on-defeat · **Mine**. |
 | **M4-4** The Long Match | [ ] Not started | **Does ~2 minutes hold attention?** | BUILD → ESCALATE → CLIMAX phase clock · Tier 1/2/3 access schedule · hazard escalation schedule · real timing measurement · **resolves the open timeout question**. |
 | **GATE** Progression judgment | [ ] Not started | *Is access escalation enough?* | Decide from human evidence whether stat progression is needed at all. |
@@ -591,6 +591,15 @@ M4-1 is one coherent milestone with internal human gates.
   damage — confirming the concern was real, and that M4-2's hazards are the next lever, not further
   M4-1 tuning.
 
+## M4-2 — COMPLETE / ACCEPTED (2026-09-13)
+
+**Status: ACCEPTED** by the Game Director. Escalating danger zones (`scripts/danger_zone.gd`), a
+mandatory readable SAFE → WARNING → ACTIVE cycle, deterministic staggered phase offsets, and the
+M4-2 reaction-window fix (a lethal hit's own effect — displacement, tint, flash — now finishes
+playing for `reaction_duration` ≈0.4s before the target disappears) are all accepted. Full record,
+including two rounds of Game Director playtest revision and the exact accepted tuning values:
+`docs/DECISIONS.md` (2026-09-12/13 entries). Permanent regression tool: `tools/m4_2_check.gd`.
+
 ## Open questions this phase must answer with evidence, not argument
 - All phase timings and total match duration.
 - **Timeout resolution** — what happens at the time limit. A hard-cap/sudden-death rule was
@@ -601,6 +610,15 @@ M4-1 is one coherent milestone with internal human gates.
 - Whether stat progression is needed at all (the GATE, after M4-4).
 - Pickup density and respawn interval.
 - Whether the post-respawn protection window becomes permanent.
+- **Relic-opening salience (new requirement, recorded 2026-09-12 from cross-milestone human
+  playtesting during the M4-2 Arena Bites Lab session — see `docs/DECISIONS.md`).** At longer setup
+  durations, once M4-1's Contact systems make the arena engaging on their own, a player can
+  completely miss the Relic opening and only learn a round ended when someone wins. **When CLIMAX
+  begins, every player must immediately perceive that the match state has changed, even if they are
+  currently fighting or collecting elsewhere.** The current quiet gate animation is not sufficient
+  once the arena holds attention independently of the Relic. Candidate treatments (hypotheses only,
+  none approved): brief camera shake, stronger gate motion, an arena-wide visual pulse, a short
+  global flash, a strong audio cue. Resolved at M4-3/M4-4, not before.
 
 ## Known risks
 1. **Readability is the binding constraint, not code** — four tiny characters, health states,

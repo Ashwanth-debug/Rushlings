@@ -15,6 +15,7 @@
 [ext_resource type="Script" path="res://scripts/power_system.gd" id="13"]
 [ext_resource type="PackedScene" path="res://scenes/power/power_pickup.tscn" id="14"]
 [ext_resource type="Script" path="res://scripts/health_system.gd" id="15"]
+[ext_resource type="PackedScene" path="res://scenes/hazard/danger_zone.tscn" id="16"]
 
 [sub_resource type="RectangleShape2D" id="FloorShape"]
 size = Vector2(2120, 120)
@@ -509,6 +510,23 @@ nav_node = "A_W"
 position = Vector2(1343, 272)
 power_type = 3
 nav_node = "A_E"
+
+[node name="Hazards" type="Node2D" parent="." unique_id=3050112270]
+
+[node name="Hazard_Floor" parent="Hazards" unique_id=3050112271 instance=ExtResource("16")]
+position = Vector2(1150, 932)
+zone_size = Vector2(220, 100)
+phase_offset = 0.0
+
+[node name="Hazard_CW" parent="Hazards" unique_id=3050112272 instance=ExtResource("16")]
+position = Vector2(650, 792)
+zone_size = Vector2(200, 90)
+phase_offset = 1.9
+
+[node name="Hazard_AE" parent="Hazards" unique_id=3050112274 instance=ExtResource("16")]
+position = Vector2(1343, 272)
+zone_size = Vector2(180, 90)
+phase_offset = 3.8
 
 [node name="RelicGate" type="Node2D" parent="." unique_id=1469229969]
 script = ExtResource("8")

@@ -67,6 +67,19 @@ var is_defeated: bool = false
 ## only take_damage() reads this.
 var spawn_protected: bool = false
 
+## M4-2 defeat-resolution window (Game Director playtest, 2026-09-13): true
+## for the short beat between a lethal hit and the moment
+## scripts/health_system.gd's _finish_defeat() actually hides the body. Input
+## is already locked via controller.frozen (begin_dying() sets it, the same
+## primitive Defeated itself uses), but the body stays visible, on-layer and
+## physically simulated - a killing Push still visibly displaces, a killing
+## Freeze's tint stays up, a killing Rocket's flash still reads - so the
+## power that caused the kill gets to finish being seen before the body
+## disappears. Separate from is_defeated so take_damage() can refuse a
+## second lethal hit landing mid-reaction, which would otherwise re-trigger
+## the whole defeat sequence a second time.
+var is_dying: bool = false
+
 const PIP_ALIVE_COLOR := Color(0.95, 0.95, 0.95, 1.0)
 const PIP_LOST_COLOR := Color(0.15, 0.15, 0.15, 0.5)
 
@@ -212,12 +225,24 @@ func is_alive() -> bool:
 ## window). health_system.gd uses the return value to decide whether a defeat
 ## transition follows.
 func take_damage() -> bool:
-	if is_defeated or spawn_protected:
+	if is_dying or is_defeated or spawn_protected:
 		return false
 	health = max(0, health - 1)
 	_update_health_indicator()
 	print("[Player] P%d took 1 damage - health=%d/%d" % [slot_id, health, max_health])
 	return true
+
+## M4-2 - the whole "reaction window" contract: lock input immediately (the
+## same primitive Defeated uses) without touching visibility, collision
+## layer or velocity, so whatever the lethal hit already did (a Push's
+## receive_launch(), a Freeze's set_frozen_visual(), a Rocket's flash_hit())
+## keeps playing out physically/visually for the reaction duration.
+func begin_dying() -> void:
+	is_dying = true
+	controller.set_frozen(true)
+
+func end_dying() -> void:
+	is_dying = false
 
 func reset_health() -> void:
 	health = max_health

@@ -2224,3 +2224,258 @@ permanent `tools/m4_1_check.gd` regression tool that must pass alongside `arena_
 in M4-2 is implemented as of this close-out.
 
 ---
+
+## 2026-09-12 — M4-2 Arena Bites Lab: first human playtest findings, revisions in progress
+
+**Status: NOT YET ACCEPTED.** M4-2 remains uncommitted. Recorded so the reasoning behind the
+in-progress revisions below isn't lost, and so a future session understands this is feedback on a
+*prototype*, not a settled design.
+
+The Game Director playtested the first mechanical build (three static danger zones, synchronized
+timings, all three concentrated in the lower half of the arena). Findings:
+
+1. **WARNING → ACTIVE readability works and must be preserved.** The blink-to-red transition reads
+   immediately as "something dangerous is about to happen here."
+2. **SAFE-state readability was weak.** The original translucent green fill read as ordinary
+   harmless terrain ("something is here, let me stand on it"), not as dormant dangerous machinery.
+   **Revision in progress:** a permanent, state-independent structural cue (a dark frame plus a row
+   of teeth along the top/bottom edges, drawn via `Node2D._draw()`) plus a duller, opaque rust/amber
+   SAFE fill color — greybox primitives only, no production art, no collision/traversal change.
+3. **All three zones synchronizing on identical timings read as one global timer**, not as different
+   parts of the arena waking up independently. **Revision in progress:** a deterministic
+   `phase_offset` per zone (seconds to fast-forward into the cycle at `arm()` time) — never runtime
+   randomness, so `tools/m4_2_check.gd` stays fully reproducible. Durations themselves (WARNING/
+   ACTIVE/SAFE) are unchanged; only each zone's starting point in its own cycle differs.
+4. **Vertical distribution was too concentrated toward the lower arena** (Floor and two Band-C-height
+   zones). **Revision in progress:** keep the Floor zone and the Band-C `C_W` chokepoint zone, and
+   move the third zone up to the `A_E` Crown platform (the east approach to the vault) — an
+   authored, already-traversed platform, not inside the Relic chamber, not a spawn, no collision
+   change. Full before/after coordinates in the M4-2 handoff report accompanying this session.
+5. **Push→hazard is not yet naturally strategic.** In normal play the Director collected a power and
+   used it reactively when another player came near, rather than consciously planning "push this
+   player into that hazard." **This is an acceptable M4-2 finding, not a defect** — hazards
+   currently influence movement/reactivity more than deliberate combat planning. M4-3's locked
+   extraction (and the predictable routes it creates) may be what makes deliberate Push/Mine
+   combos meaningful; M4-2's job was never to force that.
+
+**Explicitly not changed by this revision, per the Director's instruction:** 3-pip health, Push/
+Rocket/Freeze damage (still 1 pip each), Freeze 1.0s, defeat 1.5s, spawn protection 0.8s, hazard
+damage = 1 pip with the one-hit-per-activation rule, player↔player collision OFF, M1 movement, M2
+geometry, M3 navigation.
+
+---
+
+## 2026-09-12 — Relic-opening salience: new explicit requirement for M4-3/M4-4
+
+**Status: RECORDED as a requirement. Not solved, not attempted, in scope for M4-3/M4-4 only.**
+
+**Finding, from human testing of the normal match (not the Arena Bites Lab) at different setup
+durations, done in the same session as the M4-2 playtest above:**
+
+- At a shorter setup (~15s), the Director stays conscious that the Relic is about to open and tends
+  to rush toward it — consistent with M3-2's own accepted 10s baseline.
+- At a longer setup (~25s), M4-1's Contact systems (pickups, Push/Rocket/Freeze) become engaging
+  enough on their own that the Director can play with powers/bots and **completely forget about the
+  Relic** — the gate opening is quiet enough that sometimes the first sign a round changed state is
+  somebody suddenly winning.
+
+**This is a genuinely two-sided finding, not simply a defect:**
+
+- **Positive:** M4-1's player-to-player interaction can hold attention *independently* of the Relic
+  objective — direct evidence the M4-1 STOP 5 acceptance ("does interference make Rushlings more
+  fun") was real, not just true in isolation.
+- **Problem:** the objective-state transition itself is not salient enough once the arena becomes
+  engaging in its own right. A quiet gate animation was sufficient when SETUP was a short, low-
+  content countdown (M3-2); it is not sufficient once M4-1 gives the phase real content to hold
+  attention, which is exactly the ~25s-with-powers direction `docs/DECISIONS.md` (2026-09-06,
+  "M3 setup is 10 seconds...") already flagged as the eventual M4 working value.
+
+**The requirement, stated precisely and left otherwise open:**
+
+> When CLIMAX begins (the Relic opens), every player must immediately perceive that the match state
+> has changed, even if they are currently fighting, collecting, or otherwise engaged elsewhere on
+> the fixed screen.
+
+**Explicitly NOT decided or implemented now:** which treatment. Candidates recorded as hypotheses
+only, none approved — brief camera shake, stronger/faster gate motion, an arena-wide visual pulse, a
+short global flash, a strong audio cue. **Do not implement any of these inside M4-2** — this is
+cross-milestone feedback captured opportunistically during an M4-2 playtest session, filed against
+M4-3 (which owns the Relic carry/extraction objective) and M4-4 (which owns real phase timing
+measurement, where the ~25s setup value this finding depends on is actually adopted). See also
+`docs/ROADMAP.md`'s M4 "Open questions" list, updated with a pointer to this entry.
+
+---
+
+## 2026-09-13 — M4-2 second playtest: defeat-resolution reaction window; hazard visual reverted
+
+**Status: NOT YET ACCEPTED.** M4-2 remains uncommitted. The Game Director approved the staggered
+phase offsets and the revised vertical distribution from the previous round without further
+changes. Two new findings from this round, both addressed below.
+
+### Finding 1 — a lethal hit's own effect was never visible
+
+**The problem.** `HealthSystem._defeat()` (as it existed through the first M4-2 round) hid, froze
+and zeroed velocity on a target the SAME physics frame its health reached 0. A killing Push's
+displacement, a killing Freeze's tint, and a killing Rocket's hit flash all either hadn't started
+rendering yet or were cut off mid-tween, because the body vanished before any of them could be
+seen. The kill read as an instant disappearance, not as "that power finished me."
+
+**The fix — a reaction/resolution window, reused across every lethal source.** `player.gd` gained
+one new boolean, `is_dying`, and two methods, `begin_dying()`/`end_dying()`. `HealthSystem.apply_damage()`
+no longer calls a single `_defeat()` on a lethal hit; it calls `_begin_defeat_reaction()`, which
+locks input (`begin_dying()` calls `controller.set_frozen(true)`, the same primitive Defeated
+itself already used - a frozen `BotController` skips `brain.tick()` entirely, so a dying bot cannot
+regain control) and starts a short timer, **without touching velocity, visibility, or collision
+layer 2**. Whatever the lethal hit already did keeps playing out physically and visually for
+`reaction_duration` seconds. When that timer expires, `_finish_defeat()` runs - spill, clear any
+Freeze timer, hide, zero velocity, lock via `set_defeated(true)` - exactly what the old `_defeat()`
+did, just delayed. `take_damage()` also now refuses a second lethal hit while `is_dying` (it would
+otherwise re-trigger the whole sequence a second time on a body already mid-reaction).
+
+**Exact value: `reaction_duration = 0.4s`** (`scripts/health_system.gd`, prototype/tunable), matching
+the Director's own "~0.4s visible reaction" example. **The reaction window comes OUT of the existing
+1.5s total, not on top of it**: `defeat_duration` (1.5s, unchanged, still the accepted STOP 3/4
+value) is now split as `reaction_duration` (0.4s, visible) + a computed hidden phase
+(`defeat_duration - reaction_duration` = 1.1s). Total lethal-hit-to-respawn downtime stays ~1.5s.
+Spawn protection (0.8s) is untouched - it starts at respawn exactly as before.
+
+**Per-power behaviour, all through the same pipeline (no per-power branching in HealthSystem):**
+- **Push** - `receive_launch()` already ran before `apply_damage()` is reached (power_system.gd's
+  own call order), so the target's velocity is already in flight when `begin_dying()` runs. Because
+  velocity is left alone during the reaction window, gravity/friction integrate exactly as they
+  would for a non-lethal Push - the kill visibly displaces the target for ~0.4s before disappearing.
+- **Freeze** - `set_frozen_visual(true)` and PowerSystem's own freeze timer are already active before
+  `apply_damage()` runs; `_finish_defeat()` calls `power_system.clear_freeze()` (unchanged from
+  before), so the tint/lock persist naturally through the full reaction window and are guaranteed
+  cleared at resolution - not a full extra 1.0s, just the 0.4s reaction beat.
+- **Rocket** - `flash_hit()` already fires before `apply_damage()`; it now has 0.4s to actually be
+  seen instead of being cut off the instant health reaches 0.
+- **Hazard** - `danger_zone.gd` calls the exact same `HealthSystem.apply_damage()` every other
+  source uses; zero hazard-specific defeat code was written. The bounded one-hit-per-ACTIVE-
+  activation rule, spill, respawn and spawn protection are all unchanged and confirmed still correct
+  in `tools/m4_2_check.gd`'s extended hazard-defeat test.
+
+**A `_respawn()` ordering bug found and fixed during implementation:** `set_frozen_visual(false)`
+assigns the WHOLE `modulate` property (including alpha). It must run BEFORE `set_spawn_protected(true)`,
+not after, or it clobbers the 0.5 alpha spawn protection is about to apply. Also added explicitly to
+`_respawn()` so a lethal Freeze's blue tint can never survive into a respawned life - it previously
+had no code path guaranteeing this once `clear_freeze()` removes the pending PowerSystem timer that
+would otherwise have cleared it naturally.
+
+**Two stale-signal bugs found and fixed while extending the automated tests, both a direct
+consequence of the reaction window now letting a dying body travel and stay on collision layer 2 for
+0.4s instead of vanishing instantly:**
+- A killing Push could carry its target's still-on-layer-2 body through `PadC` (the launch pad)
+  during the reaction window. Godot's `body_entered` signal for that transient overlap can remain
+  queued/deferred and fire LATE - observed firing after the target had already respawned somewhere
+  else entirely, silently overwriting its fresh velocity with `launch_strength`. `get_overlapping_bodies()`
+  is not a valid guard against this - that list is maintained by the same deferred-signal mechanism
+  and can be equally stale. The fix (`scripts/launch_pad.gd`) re-checks the body's CURRENT
+  `global_position` against the pad's own shape geometrically, in local space, before applying
+  `receive_launch()` - a plain, dependency-free position test.
+- The same class of bug let a dying bot fall onto a real world pickup during the reaction window and
+  collect it, with the collection registering after the bot had already respawned empty-handed
+  moments earlier. `scripts/power_pickup.gd` gained the same geometric re-check, plus a dedicated
+  `is_dying` guard (a dying body is seconds from disappearing and losing everything it holds anyway;
+  collecting something new mid-reaction would just be spilled/discarded a moment later).
+
+**Both bugs were latent in the ORIGINAL M3/M4-1 code** - `launch_pad.gd` and `power_pickup.gd` always
+had `body_entered` handlers with no staleness guard. They were unobservable before because a lethal
+hit hid the body the SAME frame, giving a fast-moving body no time to travel far enough to reach
+another trigger. The M4-2 reaction window is what newly exposes them. Fixing them cost no change to
+M1 movement, launch strength, or pickup collection rules for any normal (non-stale) interaction.
+
+**A second bug in the fix itself, found by `tools/m3_check.gd`'s own sealed-state ROAM regression
+(previously deferred to the M4-1 close-out's own "5th acknowledged finding" - this one was NOT that;
+it reproduced on every single isolated run, not intermittently, which is what flagged it as a real
+regression rather than the known load-sensitive flake):** the first version of the geometric re-check
+compared the OTHER body's bare origin POINT against the pad/pickup's rectangle - a point-vs-AABB
+test, not the AABB-vs-AABB test Godot's own physics collision actually performs. This silently
+shrank every launch pad's and every pickup's effective trigger area by the player's own half-size
+(18×28px) on every side, rejecting real, non-stale entries whenever a body's EDGE (not its centre)
+was what genuinely touched the shape first - exactly the kind of overlap that happens whenever a
+body approaches from the side rather than dead-on. The rejected launches/pickups measurably changed
+bot navigation timing and position at decision points downstream, which is what let a bot end up
+physically inside the sealed vault later in that same run. **Fixed** by expanding the comparison
+rectangle by the other body's own collision half-extents (read dynamically from its
+`CollisionShape2D`) in both `launch_pad.gd` and `power_pickup.gd` - a proper (if simplified,
+non-rotated) AABB-vs-AABB test. Re-verified: the sealed-state regression is gone, and the original
+two stale-signal fixes above still hold (the rejected stale positions were hundreds of pixels away -
+far outside even the widened tolerance).
+
+### Finding 2 — the hazard visual overcorrected into looking like solid geometry
+
+**The problem.** Round 1's dark-frame-plus-teeth SAFE treatment (see the entry above,
+2026-09-12/13) fixed "reads as harmless terrain" but overcorrected into "reads as another platform/
+block to jump onto," damaging the spatial readability the original translucent footprint had.
+
+**The fix (`scripts/danger_zone.gd`).** Reverted to a single translucent fill rect plus a thin (2px)
+unfilled outline stroke in the same colour - no frame, no teeth, no filled border. What survives
+from round 1: SAFE is still a dull rust/amber, not the original harmless green, just at LOW opacity
+(0.28 alpha) rather than a solid 0.85-alpha panel - "SAFE may remain subtle... does not need to look
+aggressively dangerous while dormant if that damages spatial readability" (Director). WARNING and
+ACTIVE colours/behaviour are completely unchanged from round 1 - neither was part of this finding.
+
+**Preserved from the previous round, unchanged by either finding:** staggered deterministic phase
+offsets (0.0/1.9/3.8s), the Floor/C_W/A_E vertical distribution, WARNING 1.2s/ACTIVE 1.5s/SAFE 3.0s,
+hazard damage = 1 pip with the one-hit-per-ACTIVE-activation rule, Push/Freeze/hazard damage
+stacking, 3-pip health, Push/Rocket/Freeze = 1 pip each, Freeze 1.0s, spawn protection 0.8s, M1
+movement, M2 geometry, M3 navigation.
+
+**Regression verification (exact working tree, this round, after the AABB fix above):**
+`tools/arena_check.gd` - PASS, exit 0. `tools/m4_1_check.gd` - PASS, 0 failures, including the
+extended reaction-window assertions for Push/Freeze/Rocket (is_dying immediately, target remains
+visible/controllable-only-by-physics during the reaction window, disappears only after it elapses,
+respawns cleanly) - also re-confirms the two stale-signal fixes still hold with the widened AABB
+tolerance. `tools/m4_2_check.gd` - PASS, 0 failures, including the extended lethal-hazard
+reaction-window test. `tools/m3_check.gd` - re-run in full: **exactly the four historically-
+acknowledged edge-sampling findings, nothing else** - the point-vs-AABB bug's sealed-state ROAM
+regression is confirmed gone, and this run did not happen to reproduce the separate, known
+load-sensitive NAV STRESS/determinism finding recorded in the M4-1 close-out entry above (that one
+is intermittent by its own nature - a future run may show it again; it remains a 5th acknowledged
+finding, not something this round fixed or needed to).
+
+---
+
+## 2026-09-13 — M4-2 The Arena Bites: COMPLETE / ACCEPTED
+
+**Status: ACCEPTED** by the Game Director. Closes the M4-2 stage per `docs/ROADMAP.md`'s
+seven-stage M4 phase. Final accepted findings, on top of the two in-progress-revision rounds
+recorded above:
+
+- Transparent/subtle SAFE hazard treatment reads better than boxy/spiked geometry.
+- WARNING and ACTIVE are both readable.
+- Deterministic staggered activation (per-zone `phase_offset`) makes the arena feel alive rather
+  than reading as one synchronized global timer.
+- The lower/mid/upper vertical distribution (Floor, C_W, A_E) works.
+- Danger zones add useful environmental pressure; Push/Freeze/hazard interactions work as designed.
+- The M4-2 reaction-window fix (`reaction_duration = 0.4s` inside the existing ~1.5s defeat budget)
+  makes a lethal Push/Freeze/Rocket/hazard hit visibly finish before the target disappears, and
+  this feels good.
+
+**Accepted prototype baselines carried forward unchanged, not production balance:** 3 health pips ·
+Push = 1 pip + displacement · Rocket = 1 pip · Freeze = 1 pip + 1.0s control · lethal reaction =
+0.4s · total defeat→respawn ≈1.5s · spawn protection = 0.8s · carry-one/one-use powers · hazard = 1
+pip per player per ACTIVE activation (bounded) · WARNING 1.2s / ACTIVE 1.5s / SAFE 3.0s · deterministic
+hazard phase offsets (0.0/1.9/3.8s) · player↔player collision OFF.
+
+**Exact-tree verification at close-out (this session, autonomous):** `tools/arena_check.gd` — PASS,
+exit 0, the same two standing acknowledged exceptions ([R7] `B_Under`, the west gateway shaft/
+`VaultSealW` overlap). `tools/m3_check.gd` — re-run in full including the NAV STRESS/fairness batch:
+**exactly the four historically-acknowledged edge-sampling findings** (`C_Seam→A_E_Bridge`,
+`A_W_Bridge→Pier`, `VaultFloor→VaultEast`, `VaultEast→A_E`), nothing new; the fifth, intermittent
+load-sensitive NAV STRESS/determinism finding did not reproduce this run (expected — it is
+load/timing-sensitive by its own nature, not something any run is required to reproduce).
+`tools/m4_1_check.gd` — PASS, 0 failures. `tools/m4_2_check.gd` — PASS, 0 failures. No regressions
+introduced.
+
+**Cross-milestone finding carried forward, not solved here:** the Relic-opening salience requirement
+recorded above (2026-09-12) — "at ~25s of interaction, the Game Director can become sufficiently
+engaged in powers/combat that the current Relic opening is easy to miss" — remains open and is
+explicitly in scope for M4-3/M4-4, not M4-2.
+
+**M4-3 — The Climax is next.** Per `docs/ROADMAP.md`, its one question is whether Relic
+carry → unpredictable-but-stable extraction → interception/drop/recovery produces a better climax
+than the M3-era first-touch instant win.
+
+---

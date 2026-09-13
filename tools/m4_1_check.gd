@@ -391,6 +391,21 @@ func _reset_player_for_test(p: CharacterBody2D, pos: Vector2) -> void:
 func _hit(p: CharacterBody2D) -> bool:
 	return arena.health_system.apply_damage(p)
 
+## M4-2 - a lethal hit no longer flips is_defeated the same physics frame
+## (scripts/health_system.gd's reaction-window revision, Game Director
+## playtest 2026-09-13): the body stays is_dying for reaction_duration
+## first. Every existing assertion in this file that used to check
+## is_defeated immediately after a killing blow now waits through the
+## reaction window first, via this one helper, so the wait budget always
+## tracks the real exported value rather than a hard-coded frame count.
+func _wait_for_defeated(target: CharacterBody2D, extra_budget_s: float = 1.0) -> void:
+	var hz: float = physics_ticks_per_second()
+	var max_frames := int((arena.health_system.reaction_duration + extra_budget_s) * hz)
+	var frames := 0
+	while target.is_dying and not target.is_defeated and frames < max_frames:
+		await physics_frame
+		frames += 1
+
 # --- 7: Health ---------------------------------------------------------------
 
 func _test_health() -> void:
@@ -408,7 +423,9 @@ func _test_health() -> void:
 	_hit(p1)
 	_report("HEALTH", "next valid hit -> 1 (Critical)", p1.health == 1, "health=%d" % p1.health)
 	_hit(p1)
-	_report("HEALTH", "next valid hit -> 0 and Defeated", p1.health == 0 and p1.is_defeated, "health=%d is_defeated=%s" % [p1.health, p1.is_defeated])
+	_report("HEALTH", "next valid hit -> 0 and dying (reaction window, not yet hidden)", p1.health == 0 and p1.is_dying and not p1.is_defeated, "health=%d is_dying=%s is_defeated=%s" % [p1.health, p1.is_dying, p1.is_defeated])
+	await _wait_for_defeated(p1)
+	_report("HEALTH", "reaction window resolves into Defeated", p1.is_defeated, "is_defeated=%s" % p1.is_defeated)
 	_reset_player_for_test(p1, Vector2(500, 500))
 
 	# M4-1 damage-model experiment (Game Director finding after STOP 3/4
@@ -446,7 +463,10 @@ func _test_defeat() -> void:
 	p1.receive_power(PowerTypeScript.Type.ROCKET)
 	for _i in range(3):
 		_hit(p1)
-	_report("DEFEAT", "reaching 0 health enters Defeated", p1.is_defeated, "is_defeated=%s health=%d" % [p1.is_defeated, p1.health])
+	_report("DEFEAT", "reaching 0 health enters the reaction window immediately (is_dying, not yet Defeated)", p1.is_dying and not p1.is_defeated, "is_dying=%s is_defeated=%s health=%d" % [p1.is_dying, p1.is_defeated, p1.health])
+	_report("DEFEAT", "the carried power is still held during the reaction window (spill happens at _finish_defeat)", p1.has_power(), "carried_power=%d" % p1.carried_power)
+	await _wait_for_defeated(p1)
+	_report("DEFEAT", "reaching 0 health enters Defeated once the reaction window elapses", p1.is_defeated, "is_defeated=%s health=%d" % [p1.is_defeated, p1.health])
 	_report("DEFEAT", "an unused carried power spills, slot becomes empty", not p1.has_power(), "carried_power=%d" % p1.carried_power)
 
 	var spilled: Node = _find_pickup_near(p1.global_position, PowerTypeScript.Type.ROCKET)
@@ -470,6 +490,7 @@ func _test_defeat() -> void:
 	var pickups_before: int = arena.get_node("Pickups").get_child_count()
 	for _i in range(3):
 		_hit(p1)
+	await _wait_for_defeated(p1)
 	var pickups_after: int = arena.get_node("Pickups").get_child_count()
 	_report("DEFEAT", "does not spill anything if the player was empty", p1.is_defeated and not p1.has_power() and pickups_after == pickups_before, "is_defeated=%s pickups %d -> %d" % [p1.is_defeated, pickups_before, pickups_after])
 
@@ -503,13 +524,17 @@ func _test_respawn() -> void:
 	for _i in range(3):
 		_hit(p1)
 		_hit(bot_body)
-	_report("RESPAWN", "P1 (human) reaches Defeated", p1.is_defeated, "is_defeated=%s" % p1.is_defeated)
-	_report("RESPAWN", "P2 (bot) reaches Defeated", bot_body.is_defeated, "is_defeated=%s" % bot_body.is_defeated)
+	_report("RESPAWN", "P1 (human) enters the reaction window immediately", p1.is_dying and not p1.is_defeated, "is_dying=%s is_defeated=%s" % [p1.is_dying, p1.is_defeated])
+	_report("RESPAWN", "P2 (bot) enters the reaction window immediately", bot_body.is_dying and not bot_body.is_defeated, "is_dying=%s is_defeated=%s" % [bot_body.is_dying, bot_body.is_defeated])
 
+	# Measured from the killing hit itself (frames=0 here, not after any
+	# extra wait) - M4-2's reaction window is now part of what this measures,
+	# so the loop condition must span is_dying too, or it would exit at
+	# frame 0 (neither is_defeated yet) and under-report the real total.
 	var hz: float = physics_ticks_per_second()
 	var max_frames := int((arena.health_system.defeat_duration + 1.0) * hz)
 	var frames := 0
-	while (p1.is_defeated or bot_body.is_defeated) and frames < max_frames:
+	while (p1.is_dying or p1.is_defeated or bot_body.is_dying or bot_body.is_defeated) and frames < max_frames:
 		await physics_frame
 		frames += 1
 	var respawn_elapsed: float = frames / hz
@@ -606,7 +631,7 @@ func _test_repeated_cycles() -> void:
 			_hit(p1)
 			_hit(bot_body)
 		var frames := 0
-		while (p1.is_defeated or bot_body.is_defeated or p1.spawn_protected or bot_body.spawn_protected) and frames < max_frames:
+		while (p1.is_dying or p1.is_defeated or bot_body.is_dying or bot_body.is_defeated or p1.spawn_protected or bot_body.spawn_protected) and frames < max_frames:
 			await physics_frame
 			frames += 1
 		var clean: bool = (
@@ -655,19 +680,54 @@ func _defeat_via_power(power_type: int, label: String) -> void:
 	attacker.facing_dir = -1.0
 	attacker.receive_power(power_type)
 	arena.power_system.try_activate(attacker)
+
+	# Wait only until the lethal hit actually lands (is_dying flips the
+	# instant health reaches 0, with no delay of its own) - for Rocket this
+	# also covers the projectile's travel time. Stopping HERE rather than at
+	# is_defeated is what lets the assertions below inspect the M4-2
+	# reaction window itself (Game Director playtest 2026-09-13: "a killing
+	# hit should first complete/read as the power that caused it").
+	var travel_frames := 0
+	while not target.is_dying and travel_frames < 90:
+		await physics_frame
+		travel_frames += 1
+	_report("DEFEAT-BY-%s" % label, "the lethal %s hit lands and opens the reaction window (is_dying, not yet Defeated)" % label, target.is_dying and not target.is_defeated, "is_dying=%s is_defeated=%s health=%d" % [target.is_dying, target.is_defeated, target.health])
+	_report("DEFEAT-BY-%s" % label, "target immediately loses gameplay control during the reaction window", target.controller.frozen, "controller.frozen=%s" % target.controller.frozen)
+	_report("DEFEAT-BY-%s" % label, "target remains visible during the reaction window", target.visible, "visible=%s" % target.visible)
+
+	if power_type == PowerTypeScript.Type.PUSH:
+		# Checked a couple of frames after the hit, not at the very end of
+		# the reaction window - floor friction legitimately decays a Push's
+		# horizontal velocity over time exactly like a non-lethal Push, and
+		# that ordinary decay is not what's being tested here.
+		await _settle(2)
+		_report("PUSH", "a killing Push's displacement remains physically observable during the reaction window (not zeroed on the lethal frame)", target.velocity.length() > 50.0, "velocity=%s" % target.velocity)
+	if power_type == PowerTypeScript.Type.FREEZE:
+		_report("FREEZE", "a killing Freeze's visual/control effect remains registered during the reaction window", target.controller.frozen and arena.power_system._frozen_timers.has(target), "controller.frozen=%s _frozen_timers.has(target)=%s" % [target.controller.frozen, arena.power_system._frozen_timers.has(target)])
 	if power_type == PowerTypeScript.Type.ROCKET:
-		var hit_frames := 0
-		while not target.is_defeated and hit_frames < 90:
-			await physics_frame
-			hit_frames += 1
+		_report("ROCKET", "Rocket's existing hit feedback fires before the reaction window and the target stays visible through it", target.visible, "visible=%s" % target.visible)
+
+	# Now wait out the rest of the reaction window into actual Defeated.
+	var hit_frames := 0
+	while not target.is_defeated and hit_frames < 90:
+		await physics_frame
+		hit_frames += 1
 
 	_report("DEFEAT-BY-%s" % label, "%s can cause Defeated" % label, target.is_defeated, "is_defeated=%s health=%d" % [target.is_defeated, target.health])
+	_report("DEFEAT-BY-%s" % label, "target disappears only after the reaction window elapses", not target.visible, "visible=%s" % target.visible)
 	_report("DEFEAT-BY-%s" % label, "uses the same defeat pipeline (defeat timer armed)", arena.health_system._defeat_timers.has(target), "_defeat_timers.has(target)=%s" % arena.health_system._defeat_timers.has(target))
 
 	if power_type == PowerTypeScript.Type.FREEZE:
 		_report("FREEZE", "a Freeze-caused defeat does not leave a stale PowerSystem freeze timer", not arena.power_system._frozen_timers.has(target), "_frozen_timers.has(target)=%s" % arena.power_system._frozen_timers.has(target))
 	if power_type == PowerTypeScript.Type.PUSH:
-		_report("PUSH", "a Push-caused defeat zeroes velocity immediately (no corrupted movement state)", target.velocity == Vector2.ZERO, "velocity=%s" % target.velocity)
+		# A small tolerance, not exact zero: _finish_defeat() zeroes velocity
+		# the instant it runs, but this check reads it one script-call later
+		# in the same or next physics tick, after the (now-hidden) body's own
+		# _physics_process() may have already re-applied one tick of gravity
+		# - normal, harmless (the body is invisible and off collision layer
+		# 2), and the same tolerance the "into the respawned life" check
+		# below already uses.
+		_report("PUSH", "a Push-caused defeat zeroes velocity once resolved (no corrupted movement state)", target.velocity.length() < 100.0, "velocity=%s" % target.velocity)
 
 	# Let the full respawn cycle complete and verify cleanliness either way.
 	var hz: float = physics_ticks_per_second()
@@ -676,9 +736,13 @@ func _defeat_via_power(power_type: int, label: String) -> void:
 	while target.is_defeated and frames < max_frames:
 		await physics_frame
 		frames += 1
-	_report("DEFEAT-BY-%s" % label, "respawns cleanly via the same pipeline", not target.is_defeated and target.health == target.max_health and not target.controller.frozen, "is_defeated=%s health=%d controller.frozen=%s" % [target.is_defeated, target.health, target.controller.frozen])
+	_report("DEFEAT-BY-%s" % label, "respawns cleanly via the same pipeline", not target.is_defeated and not target.is_dying and target.health == target.max_health and not target.controller.frozen, "is_defeated=%s is_dying=%s health=%d controller.frozen=%s" % [target.is_defeated, target.is_dying, target.health, target.controller.frozen])
 	if power_type == PowerTypeScript.Type.FREEZE:
-		_report("FREEZE", "no stale Freeze lock survives into the respawned life", not target.controller.frozen, "controller.frozen=%s" % target.controller.frozen)
+		# Alpha is deliberately not checked here - spawn protection (still
+		# active immediately post-respawn) legitimately sets modulate.a=0.5;
+		# only the RGB channels (the actual blue Freeze tint) must be clear.
+		var rgb_clear: bool = target.modulate.r > 0.99 and target.modulate.g > 0.99 and target.modulate.b > 0.99
+		_report("FREEZE", "no stale Freeze lock or tint survives into the respawned life", not target.controller.frozen and rgb_clear, "controller.frozen=%s modulate=%s" % [target.controller.frozen, target.modulate])
 	if power_type == PowerTypeScript.Type.PUSH:
 		_report("PUSH", "no corrupted velocity/traversal survives into the respawned life", target.velocity.length() < 100.0 and not target.in_traversal_zone and not target.is_climbing, "velocity=%s in_traversal_zone=%s is_climbing=%s" % [target.velocity, target.in_traversal_zone, target.is_climbing])
 
@@ -717,6 +781,8 @@ func _mixed_sequence(order: Array, label: String) -> void:
 				hit_frames += 1
 		_report("MIXED", "%s: health after %s = %d/%d" % [label, PowerTypeScript.label(power_type), expected_health, target.max_health], target.health == expected_health, "health=%d (expected %d)" % [target.health, expected_health])
 
+	_report("MIXED", "%s: sequence enters the reaction window immediately (is_dying, not yet Defeated)" % label, target.is_dying and not target.is_defeated, "is_dying=%s is_defeated=%s health=%d" % [target.is_dying, target.is_defeated, target.health])
+	await _wait_for_defeated(target)
 	_report("MIXED", "%s: sequence ends in Defeated" % label, target.is_defeated, "is_defeated=%s health=%d" % [target.is_defeated, target.health])
 
 	var hz: float = physics_ticks_per_second()

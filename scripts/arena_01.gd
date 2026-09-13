@@ -27,6 +27,7 @@ const PickupFieldScript := preload("res://scripts/pickup_field.gd")
 @onready var health_system: HealthSystem = $HealthSystem
 @onready var _pickups_container: Node2D = $Pickups
 @onready var _projectiles_container: Node2D = $Projectiles
+@onready var _hazards_container: Node2D = $Hazards
 
 var match_config
 var geometry
@@ -36,6 +37,11 @@ var brains: Array = []
 var round_index: int = 0
 var pickup_field
 var contact_lab_active: bool = false
+## M4-2 Arena Bites Lab: Contact Lab conditions (sealed Relic, frozen clock)
+## plus armed, cycling danger zones. See _hazard_zones below and
+## debug_arena_bites_lab in _process().
+var arena_bites_active: bool = false
+var hazard_zones: Array = []
 
 var labels_visible: bool = true
 var collision_enabled: bool = false
@@ -52,6 +58,7 @@ func _ready() -> void:
 	_wire_bots()
 	power_system.configure(players, geometry, _projectiles_container, match_director)
 	health_system.configure(players, geometry, _spawn_anchor_positions(), power_system, _pickups_container, pickup_field)
+	_build_hazards()
 	health_system.player_respawned.connect(_on_player_respawned)
 	set_label_visibility(labels_visible)
 	set_player_collision(collision_enabled)
@@ -102,6 +109,16 @@ func _build_pickup_field() -> void:
 	pickup_field = PickupFieldScript.new()
 	for pickup in _pickups_container.get_children():
 		pickup_field.register(pickup)
+
+## M4-2 - collect the authored DangerZone instances under $Hazards (see
+## scenes/arena_01/arena_01.tscn) and hand each one the same HealthSystem
+## every other damage source already uses. Zones stay dormant (armed=false,
+## see danger_zone.gd) until Arena Bites Lab is entered - this just wires
+## the reference so arming/disarming later is a one-line loop.
+func _build_hazards() -> void:
+	hazard_zones = _hazards_container.get_children()
+	for zone in hazard_zones:
+		zone.configure(health_system)
 
 ## M4-1 STOP 4 - the same four authored Spawn markers _spawn_slots()/
 ## _full_reset() already use, read once as plain positions for
@@ -298,6 +315,25 @@ func _process(_delta: float) -> void:
 		else:
 			match_director.exit_contact_lab()
 			print("Arena01: M4-1 Contact Lab OFF - back to the accepted M3 match")
+		if arena_bites_active:
+			# Leaving Arena Bites Lab active too would fight this key's own
+			# OFF path for control of the sealed/frozen state - simplest is
+			# to keep the two lab modes mutually exclusive.
+			arena_bites_active = false
+			set_hazards_armed(false)
+	if Input.is_action_just_pressed("debug_arena_bites_lab"):
+		arena_bites_active = not arena_bites_active
+		contact_lab_active = arena_bites_active
+		power_system.reset()
+		health_system.reset()
+		if arena_bites_active:
+			match_director.enter_contact_lab()
+			set_hazards_armed(true)
+			print("Arena01: M4-2 Arena Bites Lab ON - Contact systems + armed, cycling danger zones, Relic sealed indefinitely")
+		else:
+			match_director.exit_contact_lab()
+			set_hazards_armed(false)
+			print("Arena01: M4-2 Arena Bites Lab OFF - back to the accepted M3 match")
 	if nav_mode == BotBrainScript.Mode.NAV_STRESS_TEST:
 		_update_stress_labels()
 
@@ -346,3 +382,11 @@ func set_player_collision(v: bool) -> void:
 	for p in players:
 		p.set_player_collision_enabled(v)
 	print("Arena01: player<->player collision %s" % ("ON" if v else "OFF"))
+
+## M4-2 - the one thing that keeps every authored DangerZone (scripts/
+## danger_zone.gd) dormant outside Arena Bites Lab. Disarming resets each
+## zone to a clean SAFE state rather than freezing it mid-cycle.
+func set_hazards_armed(v: bool) -> void:
+	for zone in hazard_zones:
+		zone.arm(v)
+	print("Arena01: danger zones %s" % ("ARMED" if v else "disarmed"))

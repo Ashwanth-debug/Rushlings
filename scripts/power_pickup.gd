@@ -55,13 +55,58 @@ func _apply_visual() -> void:
 	_visual.color = PowerTypeScript.color(power_type)
 	_label.text = PowerTypeScript.label(power_type)
 
+## M4-2 finding (Game Director playtest, 2026-09-13): a fast-moving body can
+## produce a body_entered signal that is still queued/deferred by the time it
+## is actually processed, sometimes after the body has already moved on -
+## observed for a dying body falling through a pickup during the new M4-2
+## defeat-resolution reaction window, where a stale signal collected a fresh
+## power moments after the same body had already respawned elsewhere. Two
+## cheap guards, neither changing collection for any real, current pickup:
+## (1) a dying body is seconds from disappearing and losing everything it
+## holds anyway - collecting something new here would just be spilled/
+## discarded a moment later, so "not really here" applies to pickups the
+## same way player.gd's set_defeated() already treats it for Defeated;
+## (2) re-verify the body's CURRENT global_position is still actually inside
+## this pickup's own shape, in local space - a plain geometry test, not
+## get_overlapping_bodies() (which is maintained by the same deferred signal
+## system and can be just as stale as the signal itself).
+##
+## The check is against this pickup's half-extents PLUS the body's own
+## half-extents (an AABB-vs-AABB test, not a point-vs-AABB test) - an
+## earlier version compared the body's bare origin point against the
+## pickup's rectangle, which wrongly rejected a real, non-stale entry
+## whenever the body's edge (not its centre) was what actually touched the
+## pickup first, shrinking every pickup's effective collection area by the
+## body's own half-size on every side (confirmed by tools/m3_check.gd's
+## sealed-state ROAM regression).
 func _on_body_entered(body: Node2D) -> void:
 	if _collected:
 		return
 	if not body.has_method("receive_power"):
 		return
+	if "is_dying" in body and body.is_dying:
+		return
+	var rect_shape := _shape.shape as RectangleShape2D
+	if rect_shape != null:
+		var local_pos: Vector2 = (_shape.global_transform.affine_inverse() * body.global_position)
+		var half: Vector2 = rect_shape.size * 0.5 + _body_half_extents(body)
+		if abs(local_pos.x) > half.x or abs(local_pos.y) > half.y:
+			return
 	body.receive_power(power_type)
 	_collect()
+
+## Best-effort half-extents of the OTHER body's own rectangular collision
+## shape, so the re-check above approximates a real shape-vs-shape overlap
+## instead of a point-vs-shape one. Zero (no expansion) if the body has no
+## such shape - strictly more conservative than skipping the check
+## entirely, never less.
+func _body_half_extents(body: Node2D) -> Vector2:
+	if not body.has_node("CollisionShape2D"):
+		return Vector2.ZERO
+	var body_shape := (body.get_node("CollisionShape2D") as CollisionShape2D).shape
+	if body_shape is RectangleShape2D:
+		return (body_shape as RectangleShape2D).size * 0.5
+	return Vector2.ZERO
 
 func _collect() -> void:
 	_collected = true

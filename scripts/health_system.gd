@@ -33,12 +33,34 @@ const PowerPickupScene := preload("res://scenes/power/power_pickup.tscn")
 ## STOP 3/4 acceptance playtest found that "noticeably too slow" (waiting a
 ## couple of seconds too long to get back into the game), so it is halved
 ## here to 1.5s as the new M4-1 prototype baseline - not a permanent value.
-## Deliberately the only number this tuning pass touches: health, all three
-## powers' damage, Freeze duration, spawn_protection_duration, respawn
-## selection, spill and pickup timing are all unchanged (Game Director
-## instruction: isolate the perceived waiting time first).
+## defeat_duration is the TOTAL downtime budget (lethal hit -> respawn),
+## unchanged by the M4-2 reaction-window revision below - only how that
+## budget is split changed. Deliberately the only numbers this tuning pass
+## and the reaction-window revision touch: health, all three powers' damage,
+## Freeze duration, spawn_protection_duration, respawn selection, spill and
+## pickup timing are all unchanged.
 @export var defeat_duration: float = 1.5
 @export var spawn_protection_duration: float = 0.8
+
+## M4-2 defeat-resolution window (Game Director playtest, 2026-09-13):
+## instant hiding on a lethal hit meant a killing Push/Freeze/Rocket/hazard
+## never got to visibly finish - the target vanished the same physics frame
+## health reached 0. reaction_duration is the short beat (prototype value,
+## chosen from the Director's own ~0.35-0.5s / "~0.4s visible reaction"
+## example) where the body stays visible, on-layer and physically simulated
+## before _finish_defeat() actually hides it. Comes OUT of defeat_duration's
+## existing total, not on top of it: hidden phase = defeat_duration -
+## reaction_duration, so total downtime stays ~1.5s exactly as already
+## accepted, split as ~0.4s visible + ~1.1s hidden instead of 0s + 1.5s.
+@export var reaction_duration: float = 0.4
+
+## M4-2 sentinel source value for arena hazard damage - distinct from every
+## real PowerType.Type value (all >= 0), so the defeat-attribution
+## diagnostic can tell "the arena" apart from "a power" without adding a
+## fake power to power_type.gd's taxonomy, which is specifically the power
+## set. scripts/danger_zone.gd passes this to apply_damage(); nothing else
+## needs to know it exists.
+const HAZARD_SOURCE := -1
 
 var players: Array = []
 var geometry = null
@@ -53,6 +75,12 @@ var pickup_field = null
 # _frozen_timers.
 var _defeat_timers: Dictionary = {}
 var _protection_timers: Dictionary = {}
+## CharacterBody2D -> seconds remaining in the M4-2 reaction window, and a
+## parallel CharacterBody2D -> source power_type dictionary so _finish_defeat
+## still gets the right attribution once the reaction elapses. Same
+## not-per-slot-id, is_instance_valid()-guarded reasoning as the two above.
+var _reaction_timers: Dictionary = {}
+var _reaction_sources: Dictionary = {}
 
 func configure(p_players: Array, p_geometry, p_spawn_anchors: Array, p_power_system: PowerSystem, p_pickups_parent: Node, p_pickup_field) -> void:
 	players = p_players
@@ -65,6 +93,7 @@ func configure(p_players: Array, p_geometry, p_spawn_anchors: Array, p_power_sys
 		power_system.power_hit.connect(_on_power_hit)
 
 func _physics_process(delta: float) -> void:
+	_update_reaction_timers(delta)
 	_update_defeat_timers(delta)
 	_update_protection_timers(delta)
 
@@ -94,18 +123,71 @@ func _find_player(slot_id: int) -> CharacterBody2D:
 func apply_damage(target: CharacterBody2D, source_power_type: int = PowerTypeScript.Type.NONE) -> bool:
 	if not target.take_damage():
 		return false
-	if target.health <= 0 and not target.is_defeated:
-		_defeat(target, source_power_type)
+	if target.health <= 0 and not target.is_dying and not target.is_defeated:
+		_begin_defeat_reaction(target, source_power_type)
 	return true
 
-func _defeat(target: CharacterBody2D, source_power_type: int = PowerTypeScript.Type.NONE) -> void:
+## M4-2 - the lethal hit's own effect (a Push's receive_launch(), a Freeze's
+## set_frozen_visual()/timer, a Rocket's flash_hit()) has ALREADY happened by
+## the time this runs - it's called from the same power_hit/apply_damage
+## chain those effects fire from, synchronously, before this function
+## returns. All this does is lock input (begin_dying(), the same
+## controller.frozen primitive Defeated itself uses - a BotController skips
+## brain.tick() entirely while frozen, so a dying bot cannot regain control)
+## and start the short reaction timer - it deliberately does NOT touch
+## velocity, visibility or collision layer 2, so whatever is already
+## physically/visually in flight keeps playing out exactly as it would for a
+## non-lethal hit, for reaction_duration seconds.
+func _begin_defeat_reaction(target: CharacterBody2D, source_power_type: int = PowerTypeScript.Type.NONE) -> void:
+	target.begin_dying()
+	_reaction_timers[target] = reaction_duration
+	_reaction_sources[target] = source_power_type
+	print("[HealthSystem] P%d lethal hit - %.2fs reaction before defeat resolves" % [target.slot_id, reaction_duration])
+
+func _update_reaction_timers(delta: float) -> void:
+	var expired: Array = []
+	for target in _reaction_timers.keys():
+		if not is_instance_valid(target):
+			expired.append(target)
+			continue
+		_reaction_timers[target] -= delta
+		if _reaction_timers[target] <= 0.0:
+			expired.append(target)
+	for target in expired:
+		var source_power_type: int = _reaction_sources.get(target, PowerTypeScript.Type.NONE)
+		_reaction_timers.erase(target)
+		_reaction_sources.erase(target)
+		if is_instance_valid(target):
+			_finish_defeat(target, source_power_type)
+
+## The reaction window has elapsed - now actually resolve the defeat: spill
+## (at the target's CURRENT position, e.g. wherever a killing Push carried
+## them, not where they were originally hit - the more physically sensible
+## reading of "the power drops where they finally went down"), clear any
+## pending Freeze timer so it can never fire on a body that's about to be
+## reset (also guarantees the frozen tint itself is cleared - see
+## _respawn()'s explicit set_frozen_visual(false)), then hide/lock/zero
+## exactly as the old single-step _defeat() used to do immediately. The
+## hidden-phase timer is defeat_duration MINUS the reaction time already
+## spent, so total lethal-hit-to-respawn downtime stays the same accepted
+## ~1.5s regardless of reaction_duration's value.
+func _finish_defeat(target: CharacterBody2D, source_power_type: int = PowerTypeScript.Type.NONE) -> void:
 	if target.has_power():
 		_spill_power(target)
 	power_system.clear_freeze(target)
+	target.end_dying()
 	target.set_defeated(true)
 	target.velocity = Vector2.ZERO
-	_defeat_timers[target] = defeat_duration
-	print("[HealthSystem] P%d DEFEATED by %s - respawn in %.1fs" % [target.slot_id, PowerTypeScript.label(source_power_type) if source_power_type != PowerTypeScript.Type.NONE else "(no power context)", defeat_duration])
+	var hidden_duration: float = max(0.0, defeat_duration - reaction_duration)
+	_defeat_timers[target] = hidden_duration
+	var source_label: String
+	if source_power_type == HAZARD_SOURCE:
+		source_label = "HAZARD"
+	elif source_power_type != PowerTypeScript.Type.NONE:
+		source_label = PowerTypeScript.label(source_power_type)
+	else:
+		source_label = "(no power context)"
+	print("[HealthSystem] P%d DEFEATED by %s - %.2fs reaction + %.2fs hidden (~%.1fs total) - respawn in %.2fs" % [target.slot_id, source_label, reaction_duration, hidden_duration, defeat_duration, hidden_duration])
 	player_defeated.emit(target.slot_id, source_power_type)
 
 ## Reuses the same PowerPickup scene/entity the authored world pickups use
@@ -157,6 +239,16 @@ func _respawn(target: CharacterBody2D) -> void:
 	target.reset_health()
 	target.set_defeated(false)
 	target.consume_power()
+	# M4-2: a lethal Freeze's tint (player.gd's set_frozen_visual(true)) is
+	# never cleared by PowerSystem's own timer expiry once
+	# power_system.clear_freeze() has removed the pending entry
+	# (_finish_defeat() does this deliberately, so a stale timer can never
+	# fire on a body mid-reset) - explicit here so "no stale Freeze survives
+	# respawn" holds for the VISUAL too, not just the timer/input-lock.
+	# Must run BEFORE set_spawn_protected(): set_frozen_visual() assigns the
+	# whole modulate (including alpha), which would otherwise clobber the
+	# translucency set_spawn_protected(true) is about to apply.
+	target.set_frozen_visual(false)
 	target.set_spawn_protected(true)
 	_protection_timers[target] = spawn_protection_duration
 	print("[HealthSystem] P%d respawned at %s (protected %.2fs)" % [target.slot_id, anchor, spawn_protection_duration])
@@ -199,8 +291,12 @@ func _update_protection_timers(delta: float) -> void:
 func reset() -> void:
 	for p in players:
 		if is_instance_valid(p):
+			p.end_dying()
 			p.set_defeated(false)
 			p.reset_health()
 			p.set_spawn_protected(false)
+			p.set_frozen_visual(false)
+	_reaction_timers.clear()
+	_reaction_sources.clear()
 	_defeat_timers.clear()
 	_protection_timers.clear()
