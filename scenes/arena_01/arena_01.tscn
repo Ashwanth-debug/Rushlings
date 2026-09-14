@@ -16,6 +16,8 @@
 [ext_resource type="PackedScene" path="res://scenes/power/power_pickup.tscn" id="14"]
 [ext_resource type="Script" path="res://scripts/health_system.gd" id="15"]
 [ext_resource type="PackedScene" path="res://scenes/hazard/danger_zone.tscn" id="16"]
+[ext_resource type="Script" path="res://scripts/extraction_system.gd" id="17"]
+[ext_resource type="PackedScene" path="res://scenes/extraction/extraction_anchor.tscn" id="18"]
 
 [sub_resource type="RectangleShape2D" id="FloorShape"]
 size = Vector2(2120, 120)
@@ -511,6 +513,11 @@ position = Vector2(1343, 272)
 power_type = 3
 nav_node = "A_E"
 
+[node name="Pickup_BE" parent="Pickups" unique_id=4000000010 instance=ExtResource("14")]
+position = Vector2(1450, 532)
+power_type = 4
+nav_node = "B_E"
+
 [node name="Hazards" type="Node2D" parent="." unique_id=3050112270]
 
 [node name="Hazard_Floor" parent="Hazards" unique_id=3050112271 instance=ExtResource("16")]
@@ -527,6 +534,36 @@ phase_offset = 1.9
 position = Vector2(1343, 272)
 zone_size = Vector2(180, 90)
 phase_offset = 3.8
+
+[node name="ExtractionSystem" type="Node" parent="." unique_id=4000000001]
+script = ExtResource("17")
+
+[node name="ExtractionAnchors" type="Node2D" parent="." unique_id=4000000002]
+
+[node name="Anchor_Floor" parent="ExtractionAnchors" unique_id=4000000003 instance=ExtResource("18")]
+position = Vector2(1700, 932)
+region = "floor"
+nav_node = "Floor"
+
+[node name="Anchor_West" parent="ExtractionAnchors" unique_id=4000000004 instance=ExtResource("18")]
+position = Vector2(780, 150)
+region = "west"
+nav_node = "Pier"
+
+[node name="Anchor_Central" parent="ExtractionAnchors" unique_id=4000000005 instance=ExtResource("18")]
+position = Vector2(1150, 792)
+region = "central"
+nav_node = "C_M"
+
+[node name="Anchor_East" parent="ExtractionAnchors" unique_id=4000000006 instance=ExtResource("18")]
+position = Vector2(1558, 272)
+region = "east"
+nav_node = "A_E_Bridge"
+
+[node name="Anchor_Seam" parent="ExtractionAnchors" unique_id=4000000007 instance=ExtResource("18")]
+position = Vector2(1880, 792)
+region = "seam"
+nav_node = "C_Seam"
 
 [node name="RelicGate" type="Node2D" parent="." unique_id=1469229969]
 script = ExtResource("8")
@@ -596,6 +633,14 @@ offset_right = 420.0
 offset_bottom = 160.0
 script = ExtResource("4")
 player_path = NodePath("../../PlayerSlots/Slot1")
+
+[node name="OpenPulse" type="ColorRect" parent="HUD" unique_id=4000000011]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(1, 1, 1, 1)
+modulate = Color(1, 1, 1, 0)
 
 [node name="MatchLabel" type="Label" parent="HUD" unique_id=3050112234]
 offset_left = 700.0

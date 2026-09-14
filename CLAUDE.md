@@ -57,7 +57,15 @@ Milestone 3-1 — Four-Player Foundation: COMPLETE / ACCEPTED (2026-09-09). Mile
 - **The accepted M3-2 match loop:** `SETUP → UNLOCKING → OPEN → SEEK_RELIC → COLLECTION → RESULTS → REMATCH`. 10s is the accepted setup-duration baseline for the current no-powers game (15s/25s remain as debug options, not deleted; ~25s stays the M4 direction once powers exist). Bots switch `ROAM → SEEK_RELIC` at OPEN via `BotBrain.Goal` and converge on the Relic using accepted M3-1 navigation; `scripts/match_telemetry.gd` is permanent dev-only, print-based convergence/fairness telemetry.
 - **Arena 01's roof/east-wall pre-positioning is ACCEPTED as an emergent strategy, not a defect** — a player who legally pre-positions on the vault header/roof before OPEN can fall directly onto the Relic. Not fixed in M3-2; recorded as an M4 counterplay hypothesis (Push/Freeze/projectiles/respawn) to be human-playtested, not assumed solved. See `docs/DECISIONS.md` (2026-09-12).
 - Full record: `docs/plans/M03_CORE_GAME_LOOP.md` (§0.5–§0.8), `docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md` (§21 close-out), and the M3-1/M3-2 entries in `docs/DECISIONS.md` (2026-09-06 through 2026-09-12).
-- **What the game currently IMPLEMENTS is the M3 loop** — `SETUP → UNLOCKING → OPEN → SEEK_RELIC → COLLECTION → RESULTS → REMATCH`, with first-touch-wins. **That is no longer the intended final match.** The approved M4 direction (`docs/plans/M04_0_MATCH_SHAPE_DESIGN.md`, approved 2026-09-12) replaces it with an escalating `BUILD → ESCALATE → CLIMAX` match ending in carry-to-a-locked-extraction. Approved, designed, **not implemented** — see the Milestone 4 section below.
+- **SUPERSEDED by M4-3 (2026-09-13, COMPLETE / ACCEPTED 2026-09-14 — see the Milestone 4 section
+  below).** This bullet described the game through M4-2: `MatchDirector` state machine unchanged
+  (`SETUP → UNLOCKING → OPEN → RESULTS`), but the Relic itself was still first-touch-wins. As of
+  M4-3, `scripts/relic.gd` was rewritten: touching the Relic while OPEN makes the toucher the
+  *carrier*, not the winner — winning now requires carrying it to a locked extraction
+  (`scripts/extraction_anchor.gd`). This is a **live change to the normal match**, not a separate
+  lab mode (Contact Lab/Arena Bites Lab remain separate dev-only toggles; M4-3's carry/extraction
+  mechanics apply to ordinary play the instant the Relic opens). **Human playtesting has confirmed
+  this** — see the M4-3 entry below and `docs/DECISIONS.md` (2026-09-14).
 
 ## Milestone 4 — Powers, Match Shape & Bot Intelligence
 **M4-0 — Match Shape Design: COMPLETE / APPROVED (2026-09-12).**
@@ -75,22 +83,38 @@ damage is superseded for the current prototype — discovered and validated duri
 generalize this into "all future powers must deal damage"**; it is a finding about this specific
 power set. See `docs/DECISIONS.md` (2026-09-12, M4-1 close-out entries) for the full record,
 regression results and STOP-by-STOP findings.
-**M4-2 — The Arena Bites: NEXT.** The one question: does making Arena 01 itself dangerous improve
-combat and make positioning/Push more strategically valuable? See
-`docs/plans/M04_0_MATCH_SHAPE_DESIGN.md` §05.5/§07 for scope. Mechanical prototyping, automated
-tests and headless soaks may proceed without stopping for approval; **accepting danger zones,
-tuning their timings permanently, redesigning Arena 01, or starting M4-3 are Game Director
-decisions, not automatic outcomes of a passing test suite.**
-- **Authority: `docs/plans/M04_0_MATCH_SHAPE_DESIGN.md`.** M4 is a phase of seven stages, not one milestone: M4-0 design (done) · M4-1 Contact (done) · M4-2 The Arena Bites (next) · M4-3 The Climax · M4-4 The Long Match · GATE progression judgment · M4-5 Broader Power Set · M4-6 Economy (conditional).
+**M4-2 — The Arena Bites: COMPLETE / ACCEPTED (2026-09-13).** Escalating danger zones
+(`scripts/danger_zone.gd`) with a mandatory SAFE → WARNING → ACTIVE cycle, deterministic staggered
+phase offsets, and the reaction-window fix (a lethal hit's own effect finishes playing for
+~0.4s before the target disappears) are all accepted. Full record: `docs/DECISIONS.md`
+(2026-09-12/13). Permanent regression tool: `tools/m4_2_check.gd`.
+**M4-3 — The Climax: COMPLETE / ACCEPTED (2026-09-14).** Relic carry, five locked extraction
+anchors, drop-on-defeat, bot pursuit/interception, Mine, and a Relic-opening salience treatment
+(camera shake + flash) are built, pass `tools/m4_3_check.gd` plus a 20-round soak, and were
+confirmed by Game Director human playtest: carry-not-instant-win reads clearly, the activated
+extraction is understandable and stays locked through ownership churn, a carrier can reach it and
+win, a defeated carrier's dropped Relic can be continued toward the same extraction by another
+player, health/powers/hazards keep working during the climax, the OPEN salience treatment is
+noticeable, and Mine mechanically works. Full record: `docs/DECISIONS.md` (2026-09-13 implementation,
+2026-09-14 acceptance). Committed. **`tools/m3_check.gd`'s objective-dependent tests (14–17) were
+updated at close-out** to assert against the current carry/carrier contract instead of the
+superseded M3-era first-touch-win one, preserving the same underlying tie-break/guard logic and
+all M1/M2/M3 navigation coverage unchanged — see that file's own header comment and
+`docs/DECISIONS.md` (2026-09-14) for the full before/after.
+- **Authority: `docs/plans/M04_0_MATCH_SHAPE_DESIGN.md`.** M4 is a phase of seven stages, not one milestone: M4-0 design (done) · M4-1 Contact (done) · M4-2 The Arena Bites (done) · M4-3 The Climax (done) · M4-4 The Long Match (next) · GATE progression judgment · M4-5 Broader Power Set · M4-6 Economy (conditional).
 - **The approved match:** `BUILD → ESCALATE → CLIMAX`. Grab the Relic, then carry it to an extraction that is selected **once per round** at first pickup (five authored region anchors, maximum region-distance from the first carrier, deterministic tie-break) and then **locked for the round** — it never recalculates on carrier defeat, Relic drop, ownership change or respawn.
 - **Powers are one-use / carry-one.** M4-1's approved set is **Push + Rocket + Freeze**, all three
   now dealing 1 pip damage on a successful hit (damage-model amendment above) while keeping distinct
-  identities via displacement/range/control. Mine → M4-3, Shield/Teleport/Mobility → M4-5.
+  identities via displacement/range/control. **Mine added and accepted at M4-3.**
+  Shield/Teleport/Mobility → M4-5.
 - **Health is three coarse pips** (`Healthy → Hurt → Critical → Defeated`), never a percentage bar; the visual treatment is character-integrated (body flash/tint), accepted at M4-1 STOP 3. **Health never prescribes behaviour** — no low-health retreat, for humans or bots.
 - **Unlimited respawns with cost, not limited lives.** On defeat the carried power spills as a contestable pickup; a defeated carrier also drops the Relic.
-- **"You feed them to the arena" is an aspiration, not a proven rule** — M4-2 must establish how important environmental damage actually becomes. Do not encode "the arena is the primary damage source."
+- **"You feed them to the arena" is an aspiration, not a proven rule.** M4-2 (accepted) confirmed danger zones add useful environmental pressure; do not encode "the arena is the primary damage source" as settled beyond that.
 - **Open by design, do not default:** all timings · timeout resolution (a hard-cap/sudden-death rule was proposed and explicitly withdrawn) · the value of environmental damage · whether stat progression is ever needed · whether the spawn protection window becomes permanent.
-- **M4-1 is implemented and accepted.** M4-2 (danger zones) is next; M4-3 onward (Relic carry/extraction, Mine, the long match) remain unimplemented.
+- **M4-1, M4-2 and M4-3 are implemented and accepted.** M4-3's own 20-round soak found a strong
+  winner-distribution skew (P2 17/20) and zero organic Mine placements in the short Climax-only
+  rounds — both preserved as diagnostics, **not acted on**; M4-4's longer match may materially change
+  both. M4-4 (the long match/phase clock) is next.
 
 
 ## Core Product Principle
@@ -143,8 +167,9 @@ These are intentionally hard constraints unless explicitly revisited:
 - One power can be carried at a time. **As of M4-0 it is also one-use:** one carried active power →
   one use → empty → collect again. Scarcity, not a cooldown, throttles combat.
 - Players collect a power by touching the pickup.
-- **M4-1's approved power set is Push + Rocket + Freeze.** Mine → M4-3; Shield, Teleport and
-  Mobility → M4-5. The old "Freeze, Push, Teleport, Shield" list is superseded as an *ordering*.
+- **M4-1's approved power set is Push + Rocket + Freeze; M4-3 adds Mine** (accepted 2026-09-14 —
+  `scripts/mine.gd`). Shield, Teleport and Mobility → M4-5. The old "Freeze, Push,
+  Teleport, Shield" list is superseded as an *ordering*.
 - **Damage-model amendment (M4-1, 2026-09-12): all three current hostile powers deal 1 pip on a
   successful hit** — Push = 1 + displacement, Rocket = 1 + range, Freeze = 1 + temporary control.
   This supersedes the M4-0 assumption that Push/Freeze deal zero direct damage; their strategic
@@ -164,8 +189,9 @@ These are intentionally hard constraints unless explicitly revisited:
   Relic. Respawn placement stays minimal — the existing authored anchor furthest from the nearest
   living opponent. Do not build a spawn director.
 - Ghost gameplay is reserved as a possible future mode.
-- **The objective is: grab the Relic, then carry it to the activated extraction.** First-touch-wins
-  is the M3-era behaviour the game currently implements, and is **not** the intended final objective.
+- **The objective is: grab the Relic, then carry it to the activated extraction.** This is what the
+  game implements as of M4-3 (`scripts/relic.gd`/`scripts/extraction_anchor.gd`), COMPLETE / ACCEPTED
+  2026-09-14, superseding the old M3-era first-touch-wins behaviour.
 - **The extraction is selected exactly once per round**, on the first Relic pickup, from five
   authored region anchors at maximum region-distance from the first carrier — then **locked for the
   round.** It must never recalculate on carrier defeat, Relic drop, ownership change or respawn.
@@ -176,8 +202,8 @@ These are intentionally hard constraints unless explicitly revisited:
   limit is an OPEN question** — a hard-cap/sudden-death rule was proposed at M4-0 and explicitly
   withdrawn. Do not default to one; M4-4 resolves it with evidence.
 - **"You don't kill your friends, you feed them to the arena" is a design aspiration, not a proven
-  rule.** The arena is *intended to become* a major source and amplifier of danger; **do not encode
-  "the arena is the primary damage source"** — M4-2 must prove it.
+  rule.** M4-2 (accepted) confirmed danger zones add useful environmental pressure; **do not encode
+  "the arena is the primary damage source"** as fully settled beyond that finding.
 - Immediate rematch is strategically important.
 
 ## Visual Direction
@@ -297,26 +323,38 @@ It is done when:
 **Milestone 3 — Core Game Loop: COMPLETE / ACCEPTED.**
 **M4-0 — Match Shape Design: COMPLETE / APPROVED (2026-09-12).**
 **M4-1 — Contact: COMPLETE / ACCEPTED (2026-09-12).** Full record in `docs/DECISIONS.md`.
-**M4-2 — The Arena Bites: NEXT, PLANNED / NOT STARTED as of the M4-1 close-out commit.**
+**M4-2 — The Arena Bites: COMPLETE / ACCEPTED (2026-09-13).** Full record in `docs/DECISIONS.md`.
+**M4-3 — The Climax: COMPLETE / ACCEPTED (2026-09-14).** Implemented and automated-tested
+2026-09-13 (see `docs/DECISIONS.md`'s 2026-09-13 entry for the full implementation record and a
+genuine production bug found and fixed along the way), then confirmed by Game Director human
+playtest and closed out, committed, 2026-09-14 (see that date's `docs/DECISIONS.md` entry for the
+close-out record, the `tools/m3_check.gd` checker-contract update, and the diagnostic findings
+carried forward — a P2-heavy 17/20 winner distribution and zero organic Mine placements in the short
+Climax-only soak — neither acted on).
 
-`docs/plans/M04_0_MATCH_SHAPE_DESIGN.md` remains **the authority for the M4 phase.** **M4 is a
-phase of seven stages, not one milestone:** M4-0 design (done) · M4-1 Contact (done) · M4-2 The
-Arena Bites (next) · M4-3 The Climax · M4-4 The Long Match · GATE progression judgment · M4-5
-Broader Power Set · M4-6 Economy (conditional).
+**M4-4 — The Long Match is next.** `docs/plans/M04_0_MATCH_SHAPE_DESIGN.md` remains **the authority
+for the M4 phase.** **M4 is a phase of seven stages, not one milestone:** M4-0 design (done) · M4-1
+Contact (done) · M4-2 The Arena Bites (done) · M4-3 The Climax (done) · M4-4 The Long Match
+(in progress — see below) · GATE progression judgment · M4-5 Broader Power Set · M4-6 Economy
+(conditional).
 
-**Do not implement M4-2 automatically just because this file is read.** M4-2's scope (danger-zone
-architecture, damage rule, authored locations, Push/Freeze interaction, bot minimums, automated
-tests, headless soak) is fixed in `docs/plans/M04_0_MATCH_SHAPE_DESIGN.md` §05.5/§07 and the M4-2
-session brief. Read it before writing any M4-2 code. **Mechanical prototyping, tests and headless
-soaks may proceed without stopping for approval; accepting the result, tuning it permanently, or
-starting M4-3 requires the Game Director.**
+**M4-4 status: implemented and automated-tested, uncommitted, NOT accepted.** A BUILD → ESCALATE →
+CLIMAX phase clock, tier-gated power access/waves, hazard escalation, an unmissable CLIMAX
+transition, a Mine-availability window, phase-aware (not strategy-aware) bots, a minimal phase/timer
+HUD read and a Long Match Lab were built per the M4-4 session brief, pass `tools/m4_4_check.gd` plus
+a 20-match soak, and are recorded in `docs/DECISIONS.md` (2026-09-14, "M4-4 The Long Match" entry).
+That session's explicit boundary: it may implement mechanics/tests/bot-only simulation and fix
+in-scope bugs, but may **not** declare M4-4 accepted, choose final match timing, rebalance
+players/spawns, conclude progression is unnecessary, or start M4-5. **Requires Game Director human
+playtest before acceptance — do not commit M4-4 code until then.**
 
 **Do not close open questions by assumption.** These are deliberately unresolved and must be settled
 by evidence, not by a future session picking a default: all phase timings and total match duration ·
-**timeout resolution** (a hard-cap/sudden-death rule was proposed and explicitly withdrawn) · how
-important environmental damage should become (M4-2) · whether stat progression is needed at all (the
-GATE after M4-4) · pickup density and respawn interval · whether the post-respawn protection window
-becomes permanent.
+**timeout resolution** (a hard-cap/sudden-death rule was proposed and explicitly withdrawn — M4-4's
+own soak deliberately continues an over-time CLIMAX within a bounded test budget rather than
+resolving it) · whether stat progression is needed at all (the GATE after M4-4) · pickup density and
+respawn interval · whether the post-respawn protection window becomes permanent · whether the M4-4
+phase timings/tiering/hazard-escalation choices hold up under real human play.
 
 ## Documentation Deliverables
 Milestone plans, audits and reports are written into `docs/` — for milestone work, `docs/plans/` — as a Markdown file (the version a future session reads) and, when the Game Director wants a review copy, an accompanying Word `.docx`. Do not deliver plans as external links; the repository must stay self-sufficient. If both formats exist for one document, the Markdown is authoritative. Note `python-docx` is not installed globally on this machine — install it into the session scratchpad to generate a `.docx`.

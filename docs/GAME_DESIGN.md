@@ -82,12 +82,15 @@ permanent verdict on Arena 01 either, only the current one.
 
 ## 7. Core Match
 
-> **SUPERSEDED IN PART BY M4-0 (approved 2026-09-12).** The "Baseline Mode" described below is the
-> **M3-era accepted match**, which remains the currently-implemented behaviour in
-> `scenes/arena_01/arena_01.tscn`. The **approved M4 direction** replaces it with an escalating
-> `BUILD → ESCALATE → CLIMAX` match ending in a carry-to-extraction objective — see §7A and
-> `docs/plans/M04_0_MATCH_SHAPE_DESIGN.md`, which is the authority for the M4 phase. The M3-era
-> text is preserved below rather than deleted, because it documents what the game currently does.
+> **SUPERSEDED IN PART BY M4-0 (approved 2026-09-12), further superseded by M4-3 (2026-09-13,
+> implemented / NOT YET ACCEPTED).** The phase-clock STRUCTURE below (a single setup timer, then
+> the Relic opens) is still what `scenes/arena_01/arena_01.tscn` implements — the full
+> `BUILD → ESCALATE → CLIMAX` phase clock with tiered power access is M4-4, not yet built. But
+> Phase 2's OBJECTIVE ("first player to touch/grab the Relic wins immediately") is **no longer what
+> the game implements**: as of M4-3, touching the Relic makes you the carrier, and winning requires
+> carrying it to a locked extraction anchor — see §7A/§8A and `docs/DECISIONS.md` (2026-09-13). The
+> M3-era text is preserved below rather than deleted, because it documents what the game used to do
+> and is the historical baseline M4-3's own A/B comparison is measured against.
 
 ### M3-era Phase 1 — Power Up / Position
 **Current M3 baseline (accepted 2026-09-12): 10 seconds**, for the present no-powers prototype —
@@ -110,7 +113,8 @@ At the end of the setup period:
 - No seals/switch puzzle is required in baseline mode.
 - Players race toward the Relic.
 - Powers are used to delay, displace or protect.
-- First player to touch/grab the Relic wins immediately. **(M3-era. Superseded by §8A's carry-to-extraction objective for the M4 direction.)**
+- First player to touch/grab the Relic wins immediately. **(M3-era, no longer implemented as of
+  M4-3, 2026-09-13. Superseded by §8A's carry-to-extraction objective.)**
 
 ### Match Duration
 - Target maximum around 2 minutes.
@@ -120,7 +124,11 @@ At the end of the setup period:
 
 ## 7A. Core Match — APPROVED M4 DIRECTION (M4-0, 2026-09-12)
 
-**Authority: `docs/plans/M04_0_MATCH_SHAPE_DESIGN.md`. Status: approved design, NOT implemented.**
+**Authority: `docs/plans/M04_0_MATCH_SHAPE_DESIGN.md`. Status: approved design.** The CLIMAX
+objective (grab → carry → locked extraction) is **implemented and ACCEPTED as of M4-3
+(2026-09-14)**, inside the existing OPEN state. The BUILD/ESCALATE phase clock and tiered
+power-access schedule drawn below are M4-4 — see that stage's own status in `docs/ROADMAP.md` and
+`docs/DECISIONS.md` before treating them as settled.
 
 ```
 BUILD       Relic sealed. Tier 1 powers on ordinary routes. Few or no hazards.
@@ -148,10 +156,10 @@ withdrawn.** Resolved at M4-4 with real pacing evidence.
 
 ## 8. Objective
 
-### M3-era baseline objective — SUPERSEDED for the M4 direction
-**Be the first player to grab the Relic.** First touch wins immediately. This is what the game
-currently implements, and it remains the accepted M3 behaviour. It is **not** the intended final
-objective — see §8A.
+### M3-era baseline objective — SUPERSEDED for the M4 direction, no longer implemented
+**Be the first player to grab the Relic.** First touch wins immediately. This was the accepted M3
+behaviour and is preserved here as the historical record, but **the game no longer implements it**
+as of M4-3 (COMPLETE / ACCEPTED 2026-09-14) — see §8A, which is now live and accepted.
 
 The Relic:
 - Is central to the game but should not be trivially accessible.
@@ -161,6 +169,15 @@ The Relic:
 - Does not require activating multiple seals in baseline mode.
 
 ## 8A. Objective — APPROVED M4 DIRECTION: carry to a locked extraction
+
+**Status: COMPLETE / ACCEPTED as of M4-3 (2026-09-14)** — confirmed by Game Director human
+playtest; see `docs/DECISIONS.md` for the full implementation and acceptance record. One deliberate
+greybox simplification found during implementation, not yet reconciled with the "plus a short global
+flash and sound" line below: the extraction reveal cue currently implemented is the anchor's own
+visual change (dormant grey → bright gold) only — no separate arena-wide flash for the reveal moment
+itself (M4-3 DID add a flash for the earlier Relic-OPEN moment, a different event). This read clearly
+in playtesting as-is; revisit only if a longer M4-4 match reveals the reveal alone isn't salient
+enough.
 
 **Grab the Relic → carry it to the activated extraction → survive the trip.**
 

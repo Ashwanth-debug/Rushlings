@@ -28,6 +28,16 @@ const PickupFieldScript := preload("res://scripts/pickup_field.gd")
 @onready var _pickups_container: Node2D = $Pickups
 @onready var _projectiles_container: Node2D = $Projectiles
 @onready var _hazards_container: Node2D = $Hazards
+## Untyped (not "ExtractionSystem") - matching player.gd's own precedent
+## (`geometry`/`nav_graph`/`pickup_field` are also untyped here): a
+## class_name for a script added this session may not yet be in the
+## editor's cached global class list, and a typed reference to an
+## unregistered global class name fails to resolve under `--headless
+## --script`, unlike `preload`-based access.
+@onready var extraction_system = $ExtractionSystem
+@onready var _extraction_anchors_container: Node2D = $ExtractionAnchors
+@onready var _camera: Camera2D = $Camera2D
+@onready var _open_pulse: ColorRect = $HUD/OpenPulse
 
 var match_config
 var geometry
@@ -42,6 +52,16 @@ var contact_lab_active: bool = false
 ## debug_arena_bites_lab in _process().
 var arena_bites_active: bool = false
 var hazard_zones: Array = []
+## M4-3 Climax Lab: hazards armed + Relic forced OPEN, self-sustaining
+## across rounds (every SETUP transition while this is true immediately
+## force-opens again) so Relic carry/extraction/Mine/winner/rematch can be
+## iterated on without the future ~2-minute M4-4 phase clock. See
+## _on_match_state_changed()'s SETUP branch and debug_climax_lab below.
+var climax_lab_active: bool = false
+var _camera_shake_t: float = 0.0
+var _camera_shake_remaining: float = 0.0
+const CAMERA_SHAKE_DURATION := 0.3
+const CAMERA_SHAKE_MAGNITUDE := 10.0
 
 var labels_visible: bool = true
 var collision_enabled: bool = false
@@ -57,9 +77,12 @@ func _ready() -> void:
 	_build_pickup_field()
 	_wire_bots()
 	power_system.configure(players, geometry, _projectiles_container, match_director)
-	health_system.configure(players, geometry, _spawn_anchor_positions(), power_system, _pickups_container, pickup_field)
+	health_system.configure(players, geometry, _spawn_anchor_positions(), power_system, _pickups_container, pickup_field, relic)
 	_build_hazards()
+	_build_extraction_system()
 	health_system.player_respawned.connect(_on_player_respawned)
+	relic.picked_up.connect(_on_relic_picked_up)
+	relic.dropped.connect(_on_relic_dropped)
 	set_label_visibility(labels_visible)
 	set_player_collision(collision_enabled)
 	# M3-2 Step 2: nav_graph's vault edges must match MatchDirector's state
@@ -120,6 +143,16 @@ func _build_hazards() -> void:
 	for zone in hazard_zones:
 		zone.configure(health_system)
 
+## M4-3 - wires the five authored ExtractionAnchor instances under
+## $ExtractionAnchors (scenes/extraction/extraction_anchor.tscn) to
+## ExtractionSystem, exactly the same "collect the authored instances, hand
+## each a configure() reference" convention _build_hazards() just used
+## above and _build_pickup_field() uses for pickups.
+func _build_extraction_system() -> void:
+	var anchors: Array = _extraction_anchors_container.get_children()
+	extraction_system.configure(anchors, geometry, players, match_director)
+	extraction_system.round_seed = _round_base_seed() + 977
+
 ## M4-1 STOP 4 - the same four authored Spawn markers _spawn_slots()/
 ## _full_reset() already use, read once as plain positions for
 ## HealthSystem's respawn-anchor selection (docs/plans/M04_0_MATCH_SHAPE_DESIGN.md
@@ -142,6 +175,29 @@ func _on_player_respawned(slot_id: int) -> void:
 	if brains[idx] != null:
 		brains[idx].handle_respawn()
 
+## M4-3 (CLAUDE.md M4-3 S1/S3/S10) - relayed to ExtractionSystem (selection)
+## and every live BotBrain (goal switch to SEEK_EXTRACTION), exactly the
+## same "arena_01.gd centralises cross-system wiring" convention
+## _on_match_state_changed()'s OPEN branch already uses for notify_open().
+func _on_relic_picked_up(slot_id: int) -> void:
+	extraction_system.on_relic_picked_up(slot_id)
+	if extraction_system.locked:
+		var x: float = extraction_system.active_anchor.global_position.x if extraction_system.active_anchor != null else NAN
+		for i in range(brains.size()):
+			if brains[i] != null:
+				brains[i].set_extraction_target(extraction_system.active_node, x)
+	for i in range(brains.size()):
+		if brains[i] != null:
+			brains[i].notify_relic_carried()
+
+## M4-3 (CLAUDE.md M4-3 S6) - every bot reverts to pursuing the Relic's new
+## live (dropped) position. The locked extraction stays exactly as it is -
+## nothing here touches ExtractionSystem.
+func _on_relic_dropped(_slot_id: int) -> void:
+	for i in range(brains.size()):
+		if brains[i] != null:
+			brains[i].notify_relic_dropped()
+
 func _wire_bots() -> void:
 	for i in range(match_config.slots.size()):
 		var cfg = match_config.slots[i]
@@ -156,6 +212,7 @@ func _wire_bots() -> void:
 			other_bodies, Callable(self, "_on_bot_hard_recovery"), match_config.curiosity_player_prob, relic.global_position.x
 		)
 		brain.set_pickup_field(pickup_field)
+		brain.set_relic_ref(relic)
 		brains[i] = brain
 		players[i].controller = BotControllerScript.new(brain)
 
@@ -182,6 +239,22 @@ func _on_match_state_changed(new_state: int) -> void:
 		for i in range(brains.size()):
 			if brains[i] != null:
 				brains[i].reset_goal()
+		# M4-3 (CLAUDE.md M4-3 S3/S8) - "Rematch must reset: ... extraction
+		# selection = none... first-pickup selection latch reset." Every
+		# SETUP transition resets it (relic.gd's own state_changed listener
+		# already resets the Relic itself the same way), so a bare
+		# debug_setup_10/15/25 key press is covered too, not just a real
+		# rematch.
+		extraction_system.reset()
+		# M4-3 Climax Lab (CLAUDE.md M4-3 S12): self-sustaining across
+		# rounds - re-open immediately so repeated carry/extraction/Mine
+		# iteration never waits on the future M4-4 phase clock or a manual
+		# G press. Runs LAST, after the SETUP body above has already reset
+		# goals/extraction/relic for real - debug_force_open() below then
+		# re-enters this same function reentrantly with OPEN, which is safe
+		# (GDScript signals are synchronous, not deferred).
+		if climax_lab_active:
+			match_director.debug_force_open()
 	elif new_state == MatchDirector.State.OPEN:
 		# M3-2 Step 4 (S08): the single authoritative OPEN goal switch.
 		# Each brain records the request and its own staggered reaction
@@ -190,6 +263,7 @@ func _on_match_state_changed(new_state: int) -> void:
 		for i in range(brains.size()):
 			if brains[i] != null:
 				brains[i].notify_open()
+		_trigger_open_salience()
 
 func _on_bot_hard_recovery(slot_id: int) -> void:
 	var idx := slot_id - 1
@@ -218,6 +292,7 @@ func _round_base_seed() -> int:
 ## function does not either.
 func _full_reset(new_setup_duration: float = -1.0) -> void:
 	round_index += 1
+	extraction_system.round_seed = _round_base_seed() + 977
 	var spawns: Array = [
 		_markers.get_node("Spawn1"), _markers.get_node("Spawn2"),
 		_markers.get_node("Spawn3"), _markers.get_node("Spawn4"),
@@ -236,6 +311,7 @@ func _full_reset(new_setup_duration: float = -1.0) -> void:
 			)
 			brain.set_mode(nav_mode)
 			brain.set_pickup_field(pickup_field)
+			brain.set_relic_ref(relic)
 			brains[i] = brain
 			players[i].controller = BotControllerScript.new(brain)
 	power_system.reset()
@@ -321,6 +397,7 @@ func _process(_delta: float) -> void:
 			# to keep the two lab modes mutually exclusive.
 			arena_bites_active = false
 			set_hazards_armed(false)
+		_exit_climax_lab_if_active()
 	if Input.is_action_just_pressed("debug_arena_bites_lab"):
 		arena_bites_active = not arena_bites_active
 		contact_lab_active = arena_bites_active
@@ -334,8 +411,67 @@ func _process(_delta: float) -> void:
 			match_director.exit_contact_lab()
 			set_hazards_armed(false)
 			print("Arena01: M4-2 Arena Bites Lab OFF - back to the accepted M3 match")
+		_exit_climax_lab_if_active()
+	if Input.is_action_just_pressed("debug_climax_lab"):
+		climax_lab_active = not climax_lab_active
+		power_system.reset()
+		health_system.reset()
+		if climax_lab_active:
+			if contact_lab_active or arena_bites_active:
+				contact_lab_active = false
+				arena_bites_active = false
+				match_director.exit_contact_lab()
+			set_hazards_armed(true)
+			match_director.reset_round()
+			match_director.debug_force_open()
+			print("Arena01: M4-3 Climax Lab ON - hazards armed, Relic forced OPEN, self-reopens every round for rapid carry/extraction/Mine iteration")
+		else:
+			set_hazards_armed(false)
+			match_director.reset_round()
+			print("Arena01: M4-3 Climax Lab OFF - back to the accepted M3/M4 match")
 	if nav_mode == BotBrainScript.Mode.NAV_STRESS_TEST:
 		_update_stress_labels()
+	_update_camera_shake(get_process_delta_time())
+
+## Contact Lab / Arena Bites Lab and Climax Lab are mutually exclusive -
+## both would otherwise fight over MatchDirector's sealed/frozen vs.
+## forced-OPEN state, the same reasoning the two older labs already use
+## against each other. debug_climax_lab's own ON path does the reverse.
+func _exit_climax_lab_if_active() -> void:
+	if not climax_lab_active:
+		return
+	climax_lab_active = false
+	print("Arena01: M4-3 Climax Lab OFF (Contact/Arena Bites Lab key pressed)")
+
+## M4-3 (CLAUDE.md M4-3 S11, and docs/DECISIONS.md 2026-09-13's cross-
+## milestone finding: "once M4-1's Contact systems make the arena engaging
+## on their own, a player can completely miss the Relic opening"). The
+## smallest combination that makes OPEN unmistakable even off-screen-
+## attention: a brief camera shake plus a short arena-wide flash pulse -
+## both greybox, both reversible, both mild enough not to impair control
+## (a 10px shake magnitude at 0.3s is far below anything that would read as
+## disorienting). Production audio/VFX are explicitly out of scope.
+func _trigger_open_salience() -> void:
+	_camera_shake_remaining = CAMERA_SHAKE_DURATION
+	_camera_shake_t = 0.0
+	if _open_pulse != null:
+		_open_pulse.modulate.a = 0.0
+		var tw := create_tween()
+		tw.tween_property(_open_pulse, "modulate:a", 0.35, 0.08)
+		tw.tween_property(_open_pulse, "modulate:a", 0.0, 0.32)
+
+func _update_camera_shake(delta: float) -> void:
+	if _camera_shake_remaining <= 0.0:
+		return
+	_camera_shake_remaining -= delta
+	_camera_shake_t += delta
+	if _camera_shake_remaining <= 0.0:
+		_camera.offset = Vector2.ZERO
+		return
+	var falloff: float = _camera_shake_remaining / CAMERA_SHAKE_DURATION
+	var seed_x := sin(_camera_shake_t * 47.0)
+	var seed_y := cos(_camera_shake_t * 61.0)
+	_camera.offset = Vector2(seed_x, seed_y) * CAMERA_SHAKE_MAGNITUDE * falloff
 
 func _physics_process(delta: float) -> void:
 	traversal_recorder.tick(delta)

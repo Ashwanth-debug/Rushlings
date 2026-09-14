@@ -2479,3 +2479,438 @@ carry → unpredictable-but-stable extraction → interception/drop/recovery pro
 than the M3-era first-touch instant win.
 
 ---
+
+## 2026-09-13 — M4-3 The Climax: mechanics implemented and automated-tested, NOT ACCEPTED
+
+**Status: IMPLEMENTED, PENDING GAME DIRECTOR PLAYTEST. Not accepted. Not committed.** Built and
+verified autonomously per the M4-3 session brief, within the explicit boundary that this session may
+implement, test and soak M4-3 but may not declare it accepted, tune extraction fairness permanently,
+redesign Arena 01, start M4-4, or introduce additional powers. Recorded here so a future session (or
+the Game Director resuming this one) has the full implementation record without re-deriving it.
+
+### What changed
+
+- **Relic is now a carried object, not an instant win.** `scripts/relic.gd` was rewritten: touching
+  the Relic while it is sitting in the world (pedestal or a drop point) makes the toucher the
+  carrier (`player.gd`'s new `is_carrying_relic`/`receive_relic()`/`drop_relic()`, exactly mirroring
+  `carried_power`'s own ownership pattern). Winning is no longer this script's job at all — see
+  extraction below. Exactly one world Relic OR one carrier at a time, achieved by toggling one
+  node's `visible` state and `carrier_slot_id`, never by creating a second instance or reparenting
+  onto the carrier.
+- **Five authored extraction anchors** (`scripts/extraction_anchor.gd`, `scenes/extraction/
+  extraction_anchor.tscn`), one per `ArenaRegions.REGIONS` region, placed after inspecting real
+  geometry and the accepted RELIABLE bot-nav subgraph: `floor`→`Floor` (1700,932) · `west`→`Pier`
+  (780,150) · `central`→`C_M` (1150,792) · `east`→`A_E_Bridge` (1558,272) · `seam`→`C_Seam`
+  (1880,792). Each sits outside every spawn, outside the Relic chamber, outside every hazard
+  zone's footprint, and reachable via RELIABLE (never SKILL-only) bot navigation, confirmed by an
+  automated reachability check against the real `NavGraph`.
+- **Extraction selection** (`scripts/extraction_system.gd`): on the FIRST successful Relic pickup of
+  a round, determines the carrier's canonical region, selects the authored anchor at maximum
+  `ArenaRegions.region_distance()`, breaks ties with a deterministic per-round seed (never runtime
+  randomness), activates and locks it. Verified: unselected before first pickup; exactly one
+  selected on first pickup; selection is a valid, RELIABLE-reachable node; a central (vault) grab
+  selects at the maximum distance (2, matching `docs/GAME_DESIGN.md` §8A's table); deterministic for
+  the same round seed + carrier region; does **not** recalculate on carrier defeat, Relic drop, a
+  new carrier, or repeated ownership churn; resets to unselected at the start of the next round.
+- **Carrier defeat drops the Relic**, independently of the carried power spill (`health_system.gd`'s
+  `_finish_defeat()` gained a second, separate branch — "Relic and active power are separate
+  objects/states... do not merge them," verified automatically: both a spill and a Relic drop can
+  happen from the same defeat, as two distinct world objects). The dropped Relic is collectible by
+  any other active (non-defeated, non-dying) player; the extraction stays locked and unchanged.
+- **Win**: `extraction_anchor.gd` polls for the current carrier entering the active anchor and calls
+  `MatchDirector.collect()` directly — MatchDirector's own state machine is unchanged (still
+  SETUP → UNLOCKING → OPEN → RESULTS; OPEN now covers the whole grab→carry→extraction climax, not
+  just the old first-touch race). A non-carrier standing in the active extraction cannot win, by
+  construction (the win check itself gates on `is_carrying_relic`).
+- **Mine**, the fourth power (`scripts/mine.gd`, `scenes/power/mine.tscn`, `power_type.gd`'s new
+  `Type.MINE`): carried/placed/consumed exactly like Push/Rocket/Freeze. Placing is always a valid
+  activation (mirrors Rocket's "firing is the tested behaviour" reasoning) and always consumes.
+  A short general arm delay (0.6s, not a per-owner exclusion) keeps the owner from instantly
+  retriggering their own newly-placed mine; after that, any player including the owner can trigger
+  it. Damage routes through the existing single `power_hit` → `HealthSystem.apply_damage()` pipeline
+  (`power_system.gd`'s new `_try_mine()`/`_on_mine_triggered()`, mirroring `report_rocket_hit()`) —
+  zero second damage implementation. One authored world Mine pickup was added (`B_E`, position
+  1450,532). Bots place Mine through the EXISTING `USE_POWER` opponent-in-range check with zero new
+  bot code — no Mine-specific AI beyond the placement rule itself, per the session brief.
+- **Bot pursuit/interception** (`scripts/bot_brain.gd`): `Goal` gained `SEEK_EXTRACTION` alongside
+  the existing `ROAM`/`SEEK_RELIC`. The OPEN-triggered goal-switch mechanism (`notify_open()`/
+  `_check_goal_switch()`'s staggered reaction-delay/grounded-cap pattern) was generalised, not
+  duplicated, into `_request_goal()`/`_pending_goal`, now also driving two new events:
+  `notify_relic_carried()` (fired for every bot, including the carrier itself, the instant anyone
+  picks up the Relic — all bots pursue the SAME locked extraction node, "choose the smallest
+  implementation that produces visible pursuit": a carrier fulfils the win condition by walking
+  there, a non-carrier arriving there is the smallest useful interception, and the pre-existing
+  `USE_POWER` range check does the rest) and `notify_relic_dropped()` (every bot reverts to
+  chasing the Relic's new live position). `SEEK_RELIC` itself was generalised to chase the Relic's
+  CURRENT world position (pedestal or drop point) via a live `relic_ref`, not the fixed pedestal x
+  it used before M4-3. No combat planner, no health-based reasoning, no Mine-specific bot logic —
+  all explicitly out of scope and not added.
+- **Relic-opening salience** (`arena_01.gd`): a brief camera shake (0.3s, 10px magnitude, decaying)
+  plus a short arena-wide flash pulse (a `CanvasLayer` overlay, `HUD/OpenPulse`) trigger once, the
+  instant OPEN fires — the cross-milestone finding recorded 2026-09-12/13 above. Mild by
+  construction (a 10px shake is far below anything that would impair control); production audio/VFX
+  remain out of scope.
+- **Climax Lab** (`arena_01.gd`, new `debug_climax_lab` key, physical `X`): arms hazards, forces the
+  Relic straight to OPEN, and — unlike Contact Lab/Arena Bites Lab — does NOT freeze
+  `MatchDirector`'s clock; it uses the real SETUP→OPEN→RESULTS→SETUP loop and self-reopens on every
+  return to SETUP for repeated iteration, without requiring the future M4-4 phase-clock
+  architecture. Mutually exclusive with Contact Lab/Arena Bites Lab, the same pattern those two
+  already use against each other. The existing `debug_toggle_gate` (G) key still works for a manual
+  force-open/force-setup toggle inside the lab.
+
+### A genuine production bug found and fixed by this session's own testing, not by the brief
+
+The first `relic.gd`/`extraction_anchor.gd` implementations toggled `Area2D.monitoring` on/off
+(hidden while carried, shown while world-active). Automated testing reproduced, on this exact new
+code, **the identical class of bug the ORIGINAL M3-2 `relic.gd` had already discovered and
+documented as the reason its own `monitoring` stays permanently true**: Godot does not reliably
+clear an `Area2D`'s internal overlap tracking when `monitoring` is toggled off then back on, so a
+body that was near the Relic/an anchor before monitoring was disabled can still be reported as
+"overlapping" many physics frames later, even after it has moved away — observed here as a
+just-respawned player, teleported far from the drop point, being credited with picking the Relic
+back up the instant it re-entered its own SETUP→OPEN cycle. **Fixed** by reverting to the original
+M3-2 pattern (`monitoring = true`, set once, never toggled) in both `relic.gd` and
+`extraction_anchor.gd`, gating all behaviour through a plain state flag (`carrier_slot_id`/`active`)
+instead — plus, as defence in depth, the SAME geometric AABB-vs-AABB re-check the M4-2 close-out
+already added to `power_pickup.gd`/`launch_pad.gd` for the related "same-frame teleport" staleness
+class, now also applied to `relic.gd`, `extraction_anchor.gd`, and `mine.gd`. Recorded here so a
+future session does not have to rediscover this a third time.
+
+### Deterministic test results (`tools/m4_3_check.gd`, new, permanent M4-3 regression tool)
+
+All ten deterministic sections PASS, 0 failures, on the exact working tree: Relic world→carrier
+(including a simultaneous double-touch resolving to exactly one carrier) · carrier defeat drops the
+Relic independently of the power spill, extraction unaffected · a dropped Relic is collectible by a
+different player, extraction still unchanged · extraction selection (unselected before first pickup,
+exactly one anchor active after, valid/RELIABLE-reachable, maximum region-distance, deterministic
+for the same round seed) · extraction locked through ownership churn, resets next round · win
+(non-carrier in the extraction cannot win; the carrier can; the correct slot enters RESULTS) ·
+defeat independence (Relic + power both drop from one defeat as separate objects; reaction window
+stays visible; respawn is clean) · Mine (places, consumes exactly once, owner-immunity window, a
+different player triggers it, exactly 1 pip, the mine clears, and a mine can be lethal through the
+same defeat pipeline) · rematch (no stale carrier/extraction/dropped-Relic/Mine across three
+simulated rounds).
+
+**Full exact-tree regression re-verified after the M4-3 changes** (all gameplay-shared files —
+`health_system.gd`, `power_system.gd`, `power_type.gd`, `player.gd`, `bot_brain.gd` — are touched by
+this stage): `tools/arena_check.gd` PASS · `tools/m4_1_check.gd` PASS on the committed M4-2-only
+tree (see the important caveat below for the combined tree) · `tools/m4_2_check.gd` PASS ·
+`tools/m4_3_check.gd` PASS (all ten deterministic sections plus the 20-round soak).
+
+**Important, expected finding — `tools/m3_check.gd` no longer passes cleanly against the
+combined M4-2+M4-3 working tree, and this is a consequence of M4-3's design, not a bug.**
+`m3_check.gd`'s own `_test_winner_resolution()` (Test group, called early in its run) directly
+tests the OLD M3-2 first-touch-instant-win behaviour: it positions a body on the Relic and expects
+`MatchDirector` to reach `RESULTS` immediately. Since M4-3 deliberately replaces that — touching
+the Relic now makes the toucher a *carrier*, not a winner, per the approved M4-0/§8A design — that
+test can never complete, and `MatchDirector` is left in a state `m3_check.gd`'s own later tests do
+not expect. This cascades into every subsequent test in the same continuous run that depends on a
+fresh OPEN transition or a RESULTS/rematch cycle: all "goal switch: ... (goal flips to SEEK_RELIC)"/
+"(reaches VaultFloor)" cases (43 additional failures beyond the four historically-acknowledged
+ones, confirmed to be exactly this single root cause — the bot goal-switch mechanism itself is
+unchanged and verified working correctly by `tools/m4_3_check.gd`'s own soak, which reached
+`RESULTS` cleanly in all 20 rounds). Re-running `tools/m4_1_check.gd`, `tools/m3_check.gd` and
+`tools/m4_2_check.gd` against the exact tree that was actually **committed** for M4-2 (M4-3's files
+set aside) reproduces the clean, expected baseline — exactly the four historically-acknowledged
+`m3_check.gd` findings, and `m4_1_check.gd`/`m4_2_check.gd` both PASS with 0 failures — confirming
+the M4-2 commit itself introduces no regression. `m3_check.gd` is an M1–M3-era tool that has never
+been updated for M4 objective logic (`m4_1_check.gd`/`m4_2_check.gd`/`m4_3_check.gd` are the
+M4-appropriate regression tools, and `m4_3_check.gd` already covers the Relic/extraction win
+condition correctly). **Not fixed by this session** — `m3_check.gd` is a protected M1–M3 regression
+tool, and deciding whether/how to update its Winner-dependent tests for the new objective is a call
+for a future *accepted* M4-3+ session, not something to silently patch before Game Director review.
+A secondary, much narrower finding from the same combined-tree testing: `tools/m4_1_check.gd`
+shows one spurious failure (`a successful Push deals exactly 1 pip`) when run against the combined
+tree, because `m4_1_check.gd` was never written with Mine in mind and a stray Mine trigger earlier
+in its own test sequence can land on a body its later Health section assumes is undamaged —
+confirmed to be test cross-contamination, not a Push/PowerSystem regression, by re-running
+`m4_1_check.gd` against the pure M4-2-only tree (PASS, 0 failures) twice.
+
+### 20-round diagnostic soak (`tools/m4_3_check.gd`'s own final section, report only)
+
+Bot-only (P2–P4), hazards armed, real Climax systems, driven through the actual RESULTS→rematch
+loop each round rather than a flat timer. Reported and NOT balanced from: first carrier by slot,
+extraction anchor/region distribution, carrier changes per round, Relic drops per round, carry
+duration (first pickup→win), OPEN→first pickup, OPEN→win, winners by slot, Mine placements/hits/
+defeats, power-caused vs. hazard-caused defeats, non-terminating rounds, hard nav recoveries. Exact
+figures for this run are in the session's own tool output/handoff report, not duplicated here as a
+frozen snapshot — a future session should re-run `tools/m4_3_check.gd` for current numbers rather
+than trusting this paragraph's age.
+
+### Explicitly NOT done this session, per the autonomy boundary
+
+M4-3 is **not** accepted. Extraction fairness was **not** permanently tuned from the soak numbers.
+Arena 01 was **not** redesigned. M4-4 (the BUILD/ESCALATE/CLIMAX phase clock, tier gating, the
+~2-minute match, timeout resolution) was **not** started. No power beyond Mine was added. **This
+work is uncommitted** — `git status` should show the M4-3 files as untracked/modified pending Game
+Director review, exactly as the session brief required.
+
+---
+
+## 2026-09-14 — M4-3 The Climax: COMPLETE / ACCEPTED, checker-contract close-out, M4-4 begun
+
+**Status: ACCEPTED** by the Game Director, confirming the 2026-09-13 implementation entry above via
+human playtest. Confirmed findings, as reported by the Director: Relic pickup becomes carry rather
+than instant win; the extraction reveal is understandable; extraction is selected once and stays
+locked for the round; a carrier can reach extraction and win; carrier defeat drops the Relic and
+another player can pick it up and continue toward the SAME extraction; health/powers/hazards keep
+working during the climax; the OPEN salience treatment is noticeable; Mine mechanically works;
+Climax Lab works. **The approved extraction rule is unchanged and was not touched**: unknown before
+first pickup → selected once → revealed → locked for the remainder of the round, never recalculated
+on carrier changes.
+
+### Phase A — exact-tree verification, before touching anything
+
+Re-ran all five accepted checker suites against the exact M4-3 working tree, in the same session
+that grants acceptance (not trusting the 2026-09-13 entry's numbers as still current):
+`tools/arena_check.gd` — PASS, exit 0, same two standing acknowledged exceptions ([R7] `B_Under`,
+the west gateway shaft/`VaultSealW` overlap). `tools/m4_1_check.gd` — one failure
+(`a successful Push deals exactly 1 pip`), reproducing exactly the test-cross-contamination finding
+the 2026-09-13 entry already diagnosed (a stray Mine trigger earlier in `m4_1_check.gd`'s own test
+sequence, a tool never written with Mine in mind, lands on a body its later Health section assumes
+is undamaged) — confirmed non-regression, not fixed here since `m4_1_check.gd` is a protected M4-1
+regression tool and this is a test-harness artifact, not a PowerSystem defect. `tools/m4_2_check.gd`
+— PASS, 0 failures, including its own 180s Arena Bites Lab soak. `tools/m4_3_check.gd` — PASS, 0
+failures across all ten deterministic sections plus its 20-round Climax soak, which reproduced the
+2026-09-13 entry's diagnostic figures closely enough to trust them as stable, not a one-off
+(winners by slot `{2: 17, 3: 2, 4: 1}`, zero Mine placements, zero non-terminating rounds, zero hard
+nav recoveries) — see "Diagnostic findings, preserved, not acted on" below.
+
+`tools/m3_check.gd`, run first against the unmodified tree exactly as committed for the 2026-09-13
+entry, reproduced that entry's finding precisely: `_test_winner_resolution()` and its downstream
+tests fail because they assert the superseded first-touch-instant-win contract, not because of any
+regression. This is the "audit the failures carefully" step the session brief asked for before
+deciding how to fix the checker architecture — see Phase A findings below.
+
+### Checker-contract change — `tools/m3_check.gd`, Tests 14–17
+
+**The problem, precisely.** `tools/m3_check.gd` is the permanent M1/M2/M3 movement, traversal and
+bot-navigation regression tool (`CLAUDE.md`). M4-3 changes none of those invariants. But four of its
+twenty-one tests — 14 (`_test_relic_collection_and_winner`), 15 (`_test_winner_resolution`), 16
+(`_test_results_freeze_and_dwell`), 17 (`_test_rematch_reset`) — were written against the M3-2
+first-touch-instant-win Relic contract, either directly (14/15 assert `relic._collected` and
+`director.winner_slot_id`/RESULTS the instant a body touches the Relic) or incidentally (16/17 use
+"stand a player on the Relic, force OPEN" purely as a convenient way to reach RESULTS, to test
+unrelated post-RESULTS behaviour: controller freeze, HUD text, the rematch dwell gate, multi-round
+reset). Left unmodified, these four tests produced the ~43 additional failures already reported at
+M4-3's implementation — real assertions failing for a real reason (the contract they test no longer
+exists), but zero information about M1/M2/M3 health, and actively obscuring genuine future
+regressions in the same noise.
+
+**The fix is not deletion, not loosening, and not a blanket skip** — each test was pointed at
+whichever contract it actually protects, per the standing rule against silently patching a
+protected regression tool and against weakening unrelated M3 coverage to make a suite green:
+
+- **Tests 14/15 still exercise real, unchanged code** — `relic.gd`'s own collection guard (no
+  collection outside OPEN; a second overlap after collection is a no-op) and its closest-to-centre/
+  lowest-slot_id tie-break math, which M4-3 carried over **verbatim** from the old winner-resolution
+  logic to decide who becomes CARRIER instead of who WINS. These two tests now assert on
+  `relic.carrier_slot_id` and `MatchDirector` staying in `OPEN`, instead of
+  `director.winner_slot_id`/`RESULTS`. Renamed "Winner: ..." labels to "Carrier: ...". This is
+  updating the test to the currently accepted contract, not weakening it — the exact same logic is
+  checked, just under its real current name and outcome.
+- **Tests 16/17 were never actually about the objective.** They now call `director.collect(slot_id)`
+  directly — the exact same entry point `scripts/extraction_anchor.gd` calls in real play — once the
+  intended round winner has, for real, via an actual Relic touch, already become the carrier (proven
+  by asserting `relic.carrier_slot_id` first, before calling `collect()`). This is a deliberate,
+  permanent decoupling of "how RESULTS is reached" from "what these two tests are actually about,"
+  matching exactly how `extraction_anchor.gd` itself reaches RESULTS in production — not a shortcut
+  around real coverage. Test 17 additionally still exercises `relic.gd`'s carrier-drop-on-reset
+  branch for real (`reset_to_pedestal()`'s "a round can end with the carrier mid-carry" case),
+  because the winner is still genuinely carrying when `collect()` is called.
+- **Test 20 (the 20-round bot-only fairness soak) needed no change at all.** It already drives the
+  real timed `SETUP → UNLOCKING → OPEN → RESULTS` loop and simply waits for whatever RESULTS the
+  currently accepted objective produces — which, since 2026-09-13, is the full M4-3
+  grab→carry→extraction loop. Its fairness numbers now measure that loop end to end, which is
+  exactly what a fairness measurement should do; its own header comment now flags that its output is
+  no longer comparable to the older M3-2 first-touch fairness numbers recorded 2026-09-09/12.
+
+**Full before/after, and the reasoning above, is now recorded permanently in `tools/m3_check.gd`'s
+own file-header comment** (a new "CHECKER-CONTRACT CHANGE" block), so a future session encountering
+these four tests does not have to rediscover why they look the way they do, or mistake the M3-era
+contract preserved in `docs/GAME_DESIGN.md` §7/§8 for something this checker still tests.
+
+**Re-verification after the fix:** `tools/m3_check.gd` re-run against the exact tree with the four
+tests updated — Tests 14/15/16/17 (the carrier/tie-break/reset logic these tests were rewritten to
+assert) pass cleanly and reliably every time. This checker now gives a future session meaningful
+signal again instead of ~43 expected failures from a superseded contract.
+
+**A pre-existing, run-to-run-variable finding, expanded during this same verification — not caused
+by the checker-contract fix, not caused by M4-3, not caused by M4-4.** Repeated runs of the exact
+same code (confirmed by running the IDENTICAL tree twice in direct succession) showed either exactly
+the four historically-acknowledged edge-sampling findings, or those four PLUS up to six more: one or
+more NAV STRESS "destination reliability"/"reaches explicit destinations" failures (Test 8) and
+occasionally Test 18's "goal switch: idle near vault approach (Pier)" case. This is the same
+load/timing-sensitive class already recorded as a "fifth acknowledged finding" at the M4-1 close-out
+(`docs/DECISIONS.md`, 2026-09-12) — that entry described it as rare and single-destination; this
+session's verification (itself needed because of an unrelated M4-4 CPU-contention scare — see the
+M4-4 entry below) found it can manifest as several simultaneous destination failures in the same
+run, not just one. **Confirmed independent of every code change in this session**: identical code
+(with all M4-4 files fully reverted to HEAD, i.e. the exact pre-existing M4-3 tree) produced 4
+failures on one run and 10 on an immediate repeat with zero files changed in between. Not
+root-caused, not fixed, not silently patched — recorded here as an expanded characterisation of the
+existing acknowledged finding, per the standing rule against treating load-sensitive test variance as
+a real regression without evidence either way.
+
+### Diagnostic findings, preserved, not acted on
+
+**Winner distribution.** The current 20-round soak (`tools/m4_3_check.gd`): P2 17/20, P3 2/20,
+P4 1/20. Treated as a strong fairness diagnostic, consistent with the M3-2-era finding that P2's
+spawn sits structurally closer to the Relic on the bot road network (`docs/DECISIONS.md`,
+2026-09-09) — **not** an instruction to alter spawns, routes, or bot behaviour. M4-4's longer match,
+with tiered power access and escalating hazards before the Relic ever opens, may materially change
+this distribution; re-measure there before drawing conclusions.
+
+**Mine.** Zero Mine placements in the short M4-3 soak (OPEN→win in the ~11–26s range, per the
+2026-09-13 entry). **Not** a finding that Mine failed — the current Climax-only rounds are simply too
+short for a bot or human to reach the Mine pickup, form a prediction about the locked extraction's
+approach, and place it before the round already resolves. M4-4 gives Mine a fairer test once players
+have meaningful pre-Climax time to acquire and carry it into the Climax.
+
+### M4-4 — The Long Match: begun this session, per explicit Director instruction
+
+Continuing automatically into M4-4 per the Director's own Phase A→Phase B instruction (this is not
+this session inventing scope). **M4-4 status, tests and soak results are recorded in a separate
+entry below** ("M4-4 The Long Match"), immediately following this one. M4-4 remains **uncommitted**
+and **not accepted** — only M4-3 was committed at this close-out.
+
+---
+
+## 2026-09-14 — M4-4 The Long Match: mechanics implemented and automated-tested, NOT ACCEPTED
+
+**Status: IMPLEMENTED, PENDING GAME DIRECTOR PLAYTEST. Not accepted. Not committed.** Built
+immediately after the M4-3 close-out above, in the same session, per the Game Director's explicit
+"continue automatically into Phase B" instruction. Within the explicit boundary that this session may
+implement, test and headless-soak M4-4 mechanics and bot-only simulations, and fix in-scope
+implementation bugs, but may **not** declare M4-4 accepted, choose final match timing, rebalance
+players/spawns, conclude progression is unnecessary, or start M4-5. Full implementation reference:
+`docs/plans/M04_4_THE_LONG_MATCH.md`.
+
+### What changed
+
+- **A `Phase` enum (`BUILD`/`ESCALATE`/`CLIMAX`/`RESULTS`) layered on top of `MatchDirector`'s
+  existing `State` enum, not replacing it** — computed as a pure function of the unchanged
+  `state`/`clock` fields. Every physical behaviour SETUP/UNLOCKING/OPEN/RESULTS already had (the
+  gate, the bar-lift telegraph, "OPEN has no timer exit but `collect()`", RESULTS freezing
+  controllers) is unchanged. `setup_duration`'s default changed from M3-2's 10s to a new **80s**
+  prototype total, split by a new `build_duration` (default 40s) into BUILD (0–40s) and ESCALATE
+  (40–78s, including the existing 2s `unlocking_duration` bar-lift tail) before CLIMAX (`state==OPEN`)
+  begins at 80s — a working hypothesis only, exactly like M3-2's 10s setup was before measurement.
+- **Tier-gated pickup access** (`scripts/power_pickup.gd`'s new `POWER_TIER` map: Push=1,
+  Freeze=2, Mine=2, Rocket=3): Push-only in BUILD; +Freeze/+Mine in ESCALATE; +Rocket in CLIMAX. Mine
+  deliberately placed at Tier 2, not Tier-3-only, so it is available well before CLIMAX and gets the
+  "fair test" the session brief asked for. Locked pickups are visually dimmed and their collision
+  shape disabled — not merely discouraged, physically uncollectible. Bots needed zero new code:
+  `pickup_field.gd`'s existing `is_available()` filter already stops offering a locked pickup as a
+  ROAM/SEEK_PICKUP target.
+- **Hazard escalation** (`scripts/danger_zone.gd`'s new `set_escalated()`, `arena_01.gd`'s new
+  `_on_match_phase_changed()`): danger zones were previously armed ONLY inside Arena Bites Lab/Climax
+  Lab — **this is the first time they run during ordinary (non-Lab) play.** Disarmed in BUILD, armed
+  at the existing accepted M4-2 baseline timing in ESCALATE, armed with `safe_duration` halved
+  (cycles roughly twice as often) in CLIMAX, disarmed again in RESULTS. No new hazard type, no damage
+  change (still exactly 1 pip), no change to `warning_duration`/`active_duration`, deterministic
+  phase offsets untouched — escalation achieved purely by changing an existing timing parameter, per
+  the session brief.
+- **CLIMAX transition salience: no change needed.** The M4-3 camera-shake/flash treatment already
+  fires from the unchanged `State.OPEN` branch — entering CLIMAX **is** entering `State.OPEN`, by
+  construction.
+- **Long Match Lab** (`debug_phase_build`/`debug_phase_escalate`/`debug_phase_climax`, physical
+  `6`/`7`/`8`): `MatchDirector.debug_jump_to_phase()` resets a fresh round already sitting in the
+  requested phase. Deliberately NOT a frozen sandbox like the other three Labs — the clock keeps
+  running normally afterward, so the real phase clock still plays out on whatever time remains.
+- **HUD** (`scripts/match_hud.gd`): the SETUP-state text now reads "BUILD · n" or "ESCALATE · n"
+  depending on phase; the OPEN-state text reads "CLIMAX" instead of "OPEN".
+- **Bots need no phase-awareness code at all** — BUILD and ESCALATE both fall under the existing
+  plain `Goal.ROAM`; goal switches remain entirely Relic-event-driven (`notify_open()`/
+  `notify_relic_carried()`/`notify_relic_dropped()`, all unchanged). Mine placement is exactly the
+  existing `USE_POWER` opportunistic range check every other power already uses — no predictive
+  planner was added, per the session brief.
+
+### Two Lab conflicts found and fixed by this session's own testing, not by the brief
+
+1. **Contact Lab / Arena Bites Lab would have been permanently locked to Tier 1** — both freeze
+   `MatchDirector`'s clock at a bare post-reset SETUP (`clock=0`, i.e. plain BUILD) forever, exactly
+   wrong for their own documented purpose ("roam/pickups/powers indefinitely"). Fixed at the source:
+   `MatchDirector.current_phase()` now returns `Phase.CLIMAX` whenever `contact_lab` is true (Climax
+   Lab needs no such override — it force-opens instead of freezing). Verified by
+   `tools/m4_1_check.gd` passing and by `tools/m4_4_check.gd`'s own explicit Contact Lab assertion.
+2. **Any pre-M4-4 regression tool forcing OPEN for unrelated reasons would now unintentionally
+   auto-arm hazards too**, since forcing OPEN now also means "entering CLIMAX." This broke
+   `tools/m4_2_check.gd`'s own DORMANT assertion (a zone expected to stay unarmed showed
+   `armed=true`). Fixed with an explicit opt-out, `arena_01.gd`'s new
+   `long_match_gating_enabled: bool` (default `true`), set to `false` — before `add_child()`, since
+   `_build_pickup_field()` runs inside `_ready()` — by every pre-M4-4 regression tool
+   (`tools/m3_check.gd`, `tools/m4_1_check.gd`, `tools/m4_2_check.gd`, `tools/m4_3_check.gd`), the
+   same "disable a newer system this checker doesn't test" precedent those files' own `_load_rig()`s
+   already use for `PowerSystem`/`HealthSystem`. Real play and `tools/m4_4_check.gd` both leave this
+   at its default `true`.
+3. **A third conflict, unrelated to Labs entirely:** `MatchDirector.setup_duration`'s own DEFAULT
+   changed from M3-2's 10s to the new 80s total, which broke `tools/m3_check.gd`'s Test 20 (a
+   hardcoded 40s per-round fairness-timeout budget written against the old ~10s baseline — every
+   round now needing 80 real seconds just to reach OPEN guaranteed every round reported
+   "non-terminating"). Fixed by having `tools/m3_check.gd`'s `_load_rig()` explicitly call
+   `arena.match_director.reset_round(10.0)` once for every rig it builds, restoring the exact
+   historical timing baseline that file's tests were designed and budgeted around.
+
+### Deterministic test results (`tools/m4_4_check.gd`, new, permanent M4-4 regression tool)
+
+All seven deterministic sections PASS, 0 failures, on the exact working tree: phase FSM timing at
+time_scale 1.0 and 1.25 (ESCALATE/CLIMAX entered within 0.25s of their expected clock values) ·
+pickup availability by phase, including Contact Lab reporting every tier unlocked despite its frozen
+BUILD clock · hazard escalation by phase, including Arena Bites Lab keeping its own unescalated
+baseline untouched · Relic inaccessible before CLIMAX, available at CLIMAX · extraction selection
+unaffected by the phase wrapper (full extraction-rule coverage stays `tools/m4_3_check.gd`'s job,
+not duplicated here) · defeat/respawn cycling identically in BUILD/ESCALATE/CLIMAX · rematch clearing
+every phase-driven state back to a clean BUILD.
+
+**Full exact-tree regression, re-verified after the `long_match_gating_enabled` fix:**
+`tools/arena_check.gd` PASS, exit 0 · `tools/m4_2_check.gd` PASS, 0 failures · `tools/m4_3_check.gd`
+PASS, 0 failures, including its own 20-round Climax-only soak. `tools/m4_1_check.gd` reproduced the
+SAME pre-existing, already-documented "test cross-contamination" flake recorded at the M4-3
+close-out above (a stray Mine trigger, unrelated to M4-4, occasionally lands on a body its Health
+section assumes undamaged) — confirmed not a new regression: Mine has existed in `arena_01.tscn`
+since M4-3 independent of tier gating, and the M4-4 opt-out makes Contact Lab's own pickup access
+identical to pre-M4-4 behaviour, not different. Not fixed here, for the same reason it was not fixed
+at the M4-3 close-out.
+
+**`tools/m3_check.gd` triggered a real investigation, resolved as a false alarm — recorded in detail
+because the investigation itself is the useful artifact.** An early full-tree run showed 10
+failures — the 4 historically-acknowledged ones plus 6 new NAV STRESS/goal-switch failures that
+looked, at first, like a real M4-4 regression surviving the `long_match_gating_enabled` opt-out.
+Bisection (bit-for-bit reverting each M4-4 file to HEAD one at a time and re-running) traced it to
+`scripts/power_pickup.gd` — until running that SAME "clean" bisected configuration a second time
+produced the identical 6 failures with zero files changed in between, proving the first "clean" run
+had simply gotten lucky. Confirmed conclusively: this is the pre-existing, already-documented
+load/timing-sensitive NAV STRESS flakiness (`docs/DECISIONS.md`, 2026-09-12, M4-1's "fifth
+acknowledged finding"), which can manifest as several simultaneous destination failures per run, not
+just one as first recorded — independent of M4-3, independent of M4-4, and NOT fixed here. See that
+earlier close-out entry above for the full, corrected characterisation. The lesson for a future
+session: a single m3_check.gd run showing more than the four historical findings is not by itself
+evidence of a regression — re-run before concluding one, the same standard this session should have
+applied to itself sooner.
+
+### 20-match diagnostic soak (`tools/m4_4_check.gd`'s own final section, report only)
+
+Bot-only (all four slots), real BUILD → ESCALATE → CLIMAX driven through the actual RESULTS →
+rematch loop each match, at `time_scale=1.25`. Reported and NOT balanced from: match duration,
+BUILD+ESCALATE → CLIMAX transition time, power uses/hits by phase, defeats by phase, hazard-caused
+defeats by phase, Mine placements/hits, carrier changes per match, winners by slot, non-terminating
+matches, hard nav recoveries. Exact figures for this run are in the session's own tool output/
+handoff report, not duplicated here as a frozen snapshot — re-run `tools/m4_4_check.gd` for current
+numbers. **Compared against M4-3's own 20-round Climax-only soak** (P2 17/20, P3 2/20, P4 1/20;
+zero Mine placements) to see whether the longer BUILD/ESCALATE phases change either finding — see
+this session's handoff report for the actual comparison; neither this session's nor M4-3's numbers
+were acted on or balanced from.
+
+### Explicitly NOT done this session, per the autonomy boundary
+
+M4-4 is **not** accepted. Final match timing was **not** chosen — 80s/40s remain an explicit working
+hypothesis. Players/spawns were **not** rebalanced from either soak's winner distribution. Whether
+stat progression is needed (the GATE) was **not** concluded either way. M4-5 was **not** started.
+**Timeout resolution remains OPEN** — the soak's own bounded-budget handling for a stalemated match
+(continue for up to 140s of CLIMAX, then report it) is a test-harness convenience for this session's
+own soak, not a proposed game rule, and must not be read as one. **This work is uncommitted** —
+`git status` should show the M4-4 files as untracked/modified pending Game Director review, while
+M4-3's own files were committed at the close-out above.
+
+---

@@ -24,6 +24,48 @@ extends SceneTree
 #      in a logical-idle debug_state for too long, rare hard recovery.
 #   6. Collision toggle - OFF truly allows overlap/pass-through, ON
 #      genuinely separates players, verified via real layers/masks.
+#
+# CHECKER-CONTRACT CHANGE (M4-3 close-out, 2026-09-14) - read before touching
+# Tests 14-17, 20. This file's whole job is protecting M1/M2 movement/
+# traversal and M3 navigation/bot invariants, which M4-3 changes nothing
+# about. But four tests (14-17) were written against the M3-era objective -
+# "first touch on the Relic wins immediately" - which M4-3 deliberately
+# replaced with carry-to-locked-extraction (docs/GAME_DESIGN.md S7A/S8A,
+# docs/DECISIONS.md 2026-09-13/14). Left unmodified, those four tests
+# produced ~43 failures that were never a real regression, just a checker
+# still asserting a superseded contract - confirmed harmless in the M4-3
+# implementation record (docs/plans/M04_3_THE_CLIMAX.md S10) and re-confirmed
+# at M4-3 acceptance (docs/DECISIONS.md 2026-09-14).
+#
+# The fix applied here is NOT "delete the tests" or "loosen them until green"
+# - it is to point each one at whichever contract it actually protects:
+#   - Test 14/15 exercise relic.gd's own collection guard and closest/
+#     lowest-slot_id tie-break math directly. That math did not go away at
+#     M4-3 - relic.gd still runs it verbatim, just to decide who becomes
+#     CARRIER instead of who WINS. These tests now assert on
+#     `relic.carrier_slot_id`/MatchDirector staying in OPEN, instead of
+#     `director.winner_slot_id`/RESULTS. Still real coverage of real code.
+#   - Test 16/17 are about POST-RESULTS behaviour (controller freeze, HUD
+#     text, rematch dwell gate, multi-round reset) - they were never actually
+#     testing the objective itself, just using relic-touch as a convenient
+#     way to reach RESULTS. They now call `director.collect(slot_id)`
+#     directly - the exact same entry point scripts/extraction_anchor.gd
+#     calls in real play - once the intended winner has (for 16/17, for
+#     real, via an actual relic touch) already become the carrier. This is a
+#     deliberate, permanent decoupling of "how RESULTS is reached" from
+#     "what these tests are actually about," not a temporary shim.
+#   - Test 20 (the bot-only fairness soak) needed NO change - it already
+#     drives the real timed SETUP->UNLOCKING->OPEN loop and waits for a real
+#     RESULTS, so it now measures the actual accepted M4-3 objective
+#     end-to-end, which is exactly what a fairness measurement should do.
+#
+# The M3-era first-touch-wins contract itself is not deleted from the
+# project - it remains documented as history in docs/GAME_DESIGN.md SS7/8
+# (marked superseded) - only this checker's assertions were updated to match
+# the currently accepted contract. Full grab->carry->extraction->win
+# coverage, including the once-per-round locked-extraction rule this file
+# does not touch at all, lives in tools/m4_3_check.gd and is not duplicated
+# here.
 
 const ARENA_SCENE_PATH := "res://scenes/arena_01/arena_01.tscn"
 
@@ -102,6 +144,17 @@ func _load_rig() -> Dictionary:
 	# same class of determinism break as the Push/Freeze case documented
 	# above, so this is disabled here too, defence-in-depth.
 	arena.get_node("HealthSystem").set_physics_process(false)
+	# M4-4 - MatchDirector.setup_duration's own DEFAULT changed from M3-2's
+	# 10s to an 80s BUILD+ESCALATE prototype total (scripts/match_director.gd's
+	# own header note). Every test below was written and timing-budgeted
+	# against the OLD ~10s baseline (most explicitly Test 20's
+	# FAIRNESS_ROUND_TIMEOUT_S, a HARDCODED 40s per-round wall-clock budget
+	# that silently guarantees every round "non-terminating" once a fresh
+	# round needs 80 real seconds just to reach OPEN) - restoring the
+	# historical baseline here, once, for every rig this file creates, is the
+	# same test-isolation precedent as the PowerSystem/HealthSystem disables
+	# immediately above, applied to a timing default instead of a system.
+	arena.match_director.reset_round(10.0)
 	return {"arena": arena, "geometry": arena.geometry, "graph": arena.nav_graph}
 
 func _unload_rig(arena: Node2D) -> void:
@@ -1410,7 +1463,13 @@ func _test_sealed_state_nav_connectivity() -> void:
 # at OPEN, fires exactly once.
 
 func _test_relic_collection_and_winner() -> void:
-	print("\n--- Test 14: Relic collection - impossible during SETUP/UNLOCKING, active only at OPEN, fires once ---")
+	print("\n--- Test 14: Relic collection - impossible during SETUP/UNLOCKING, active only at OPEN, carrier fires once ---")
+	# M4-3 (see the file-header CHECKER-CONTRACT CHANGE note): touching the
+	# Relic no longer wins the match - it makes the toucher the carrier. The
+	# guard being tested here (no collection outside OPEN; a second overlap
+	# after collection is a no-op) is exactly the same invariant it always
+	# was; only the field/state checked changed, from
+	# director.winner_slot_id/RESULTS to relic.carrier_slot_id/staying OPEN.
 	var rig := await _load_rig()
 	var arena: Node2D = rig.arena
 	var director: MatchDirector = arena.match_director
@@ -1422,47 +1481,51 @@ func _test_relic_collection_and_winner() -> void:
 		await physics_frame
 	# Relic.monitoring stays permanently true by design (see relic.gd's own
 	# header comment - toggling it off/on was found to leave stale overlap
-	# data across a body's later movement, which broke rematch winner
+	# data across a body's later movement, which broke rematch carrier
 	# resolution). The guard against collection during SETUP/UNLOCKING is
 	# purely the state check in _physics_process, proven directly below by
-	# state never advancing despite this forced overlap.
-	_report("Relic collection guard active during SETUP (forced overlap)", "FAIL" if relic._collected else "PASS", "_collected=%s" % relic._collected)
+	# carrier_slot_id never advancing despite this forced overlap.
+	_report("Relic collection guard active during SETUP (forced overlap)", "FAIL" if relic.carrier_slot_id >= 0 else "PASS", "carrier_slot_id=%d" % relic.carrier_slot_id)
 	_report("Collection impossible during SETUP (forced overlap)", "PASS" if director.state == MatchDirector.State.SETUP else "FAIL", "state='%s'" % director.state)
 
 	director._set_state(MatchDirector.State.UNLOCKING)
 	for _i in range(15):
 		await physics_frame
-	_report("Relic collection guard active during UNLOCKING (forced overlap)", "FAIL" if relic._collected else "PASS", "_collected=%s" % relic._collected)
+	_report("Relic collection guard active during UNLOCKING (forced overlap)", "FAIL" if relic.carrier_slot_id >= 0 else "PASS", "carrier_slot_id=%d" % relic.carrier_slot_id)
 	_report("Collection impossible during UNLOCKING (forced overlap)", "PASS" if director.state == MatchDirector.State.UNLOCKING else "FAIL", "state='%s'" % director.state)
 
 	director.debug_force_open()
 	for _i in range(15):
 		await physics_frame
-	if director.state == MatchDirector.State.RESULTS and director.winner_slot_id == 1:
-		_report("Collection active at OPEN, correct winner", "PASS", "P1 collected, winner_slot_id=1")
+	if director.state == MatchDirector.State.OPEN and relic.carrier_slot_id == 1:
+		_report("Collection active at OPEN, P1 becomes carrier", "PASS", "P1 (slot 1) is now the carrier, MatchDirector still OPEN")
 	else:
-		_report("Collection active at OPEN, correct winner", "FAIL", "state='%s' winner_slot_id=%d" % [director.state, director.winner_slot_id])
+		_report("Collection active at OPEN, P1 becomes carrier", "FAIL", "state='%s' carrier_slot_id=%d" % [director.state, relic.carrier_slot_id])
 
-	var winner_after_first: int = director.winner_slot_id
+	var carrier_after_first: int = relic.carrier_slot_id
 	var hz := physics_ticks_per_second()
 	for _i in range(int(1.0 * hz)):
 		await physics_frame
-	if director.state == MatchDirector.State.RESULTS and director.winner_slot_id == winner_after_first:
-		_report("Collection fires exactly once", "PASS", "RESULTS/winner unchanged after 1s of further ticks")
+	if relic.carrier_slot_id == carrier_after_first:
+		_report("Collection fires exactly once", "PASS", "carrier_slot_id unchanged after 1s of further ticks")
 	else:
-		_report("Collection fires exactly once", "FAIL", "state/winner changed: state='%s' winner=%d" % [director.state, director.winner_slot_id])
+		_report("Collection fires exactly once", "FAIL", "carrier changed: carrier_slot_id=%d (was %d)" % [relic.carrier_slot_id, carrier_after_first])
 
 	await _unload_rig(arena)
 
-# --- Test 15: deterministic winner resolution (M3-2 Step 3) ------------------
-# docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md S11: single overlap, same-frame
-# multi-overlap (closest to centre wins), exact-distance tie (lowest
-# slot_id wins). Controllers are frozen for the whole test so bot ROAM
-# cannot move a body out of its deliberately-placed test position before the
-# poll runs - this isolates the tie-break MATH, not live navigation.
+# --- Test 15: deterministic carrier resolution (single/multi-overlap/tie) ---
+# docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md S11's tie-break rules, still real
+# and load-bearing after M4-3: single overlap, same-frame multi-overlap
+# (closest to centre becomes carrier), exact-distance tie (lowest slot_id
+# becomes carrier). relic.gd runs this exact math verbatim in
+# _physics_process() to decide who becomes CARRIER now, not who wins - see
+# the file-header CHECKER-CONTRACT CHANGE note. Controllers are frozen for
+# the whole test so bot ROAM cannot move a body out of its
+# deliberately-placed test position before the poll runs - this isolates the
+# tie-break MATH, not live navigation.
 
 func _test_winner_resolution() -> void:
-	print("\n--- Test 15: deterministic winner resolution (single/multi-overlap/tie) ---")
+	print("\n--- Test 15: deterministic carrier resolution (single/multi-overlap/tie) ---")
 
 	var rig := await _load_rig()
 	var arena: Node2D = rig.arena
@@ -1474,10 +1537,10 @@ func _test_winner_resolution() -> void:
 	director.debug_force_open()
 	for _i in range(15):
 		await physics_frame
-	if director.state == MatchDirector.State.RESULTS and director.winner_slot_id == 2:
-		_report("Winner: single overlap", "PASS", "P2 alone -> P2 wins")
+	if relic.carrier_slot_id == 2:
+		_report("Carrier: single overlap", "PASS", "P2 alone -> P2 becomes carrier")
 	else:
-		_report("Winner: single overlap", "FAIL", "winner_slot_id=%d state='%s'" % [director.winner_slot_id, director.state])
+		_report("Carrier: single overlap", "FAIL", "carrier_slot_id=%d state='%s'" % [relic.carrier_slot_id, director.state])
 	await _unload_rig(arena)
 
 	rig = await _load_rig()
@@ -1493,10 +1556,10 @@ func _test_winner_resolution() -> void:
 	director.debug_force_open()
 	for _i in range(15):
 		await physics_frame
-	if director.state == MatchDirector.State.RESULTS and director.winner_slot_id == 2:
-		_report("Winner: same-frame multi-overlap, closest wins", "PASS", "P2 (dist 5) wins over P1 (15) and P3 (10)")
+	if relic.carrier_slot_id == 2:
+		_report("Carrier: same-frame multi-overlap, closest becomes carrier", "PASS", "P2 (dist 5) becomes carrier over P1 (15) and P3 (10)")
 	else:
-		_report("Winner: same-frame multi-overlap, closest wins", "FAIL", "winner_slot_id=%d state='%s'" % [director.winner_slot_id, director.state])
+		_report("Carrier: same-frame multi-overlap, closest becomes carrier", "FAIL", "carrier_slot_id=%d state='%s'" % [relic.carrier_slot_id, director.state])
 	await _unload_rig(arena)
 
 	rig = await _load_rig()
@@ -1511,24 +1574,38 @@ func _test_winner_resolution() -> void:
 	director.debug_force_open()
 	for _i in range(15):
 		await physics_frame
-	if director.state == MatchDirector.State.RESULTS and director.winner_slot_id == 2:
-		_report("Winner: exact-distance tie, lowest slot_id wins", "PASS", "P2 (slot 2) beats P4 (slot 4) on an exact 8px tie")
+	if relic.carrier_slot_id == 2:
+		_report("Carrier: exact-distance tie, lowest slot_id becomes carrier", "PASS", "P2 (slot 2) beats P4 (slot 4) on an exact 8px tie")
 	else:
-		_report("Winner: exact-distance tie, lowest slot_id wins", "FAIL", "winner_slot_id=%d state='%s'" % [director.winner_slot_id, director.state])
+		_report("Carrier: exact-distance tie, lowest slot_id becomes carrier", "FAIL", "carrier_slot_id=%d state='%s'" % [relic.carrier_slot_id, director.state])
 	await _unload_rig(arena)
 
 # --- Test 16: RESULTS - frozen gameplay, HUD, rematch dwell gate (M3-2 Step 3)
 
 func _test_results_freeze_and_dwell() -> void:
 	print("\n--- Test 16: RESULTS - frozen gameplay, correct HUD, rematch dwell gate ---")
+	# This test is about POST-RESULTS behaviour (controller freeze, HUD text,
+	# rematch dwell gate) - it was never actually exercising the objective
+	# itself (Test 14/15 do that). P3 is placed on the Relic and genuinely
+	# becomes the carrier via a real touch, then director.collect() - the
+	# exact entry point scripts/extraction_anchor.gd calls in real play -
+	# simulates reaching the (untested-here) extraction while still
+	# carrying. See the file-header CHECKER-CONTRACT CHANGE note.
 	var rig := await _load_rig()
 	var arena: Node2D = rig.arena
 	var director: MatchDirector = arena.match_director
 	var relic: Area2D = arena.get_node("Relic")
 
-	arena.players[2].reset_to(relic.global_position)  # P3 wins
+	arena.players[2].reset_to(relic.global_position)  # P3 becomes carrier
 	director.debug_force_open()
 	for _i in range(15):
+		await physics_frame
+	if relic.carrier_slot_id != 3:
+		_report("RESULTS setup (P3 becomes carrier)", "FAIL", "carrier_slot_id=%d - cannot continue this test" % relic.carrier_slot_id)
+		await _unload_rig(arena)
+		return
+	director.collect(3)  # P3 wins by reaching extraction while carrying
+	for _i in range(5):
 		await physics_frame
 	if director.state != MatchDirector.State.RESULTS or director.winner_slot_id != 3:
 		_report("RESULTS setup (P3 wins)", "FAIL", "state='%s' winner=%d - cannot continue this test" % [director.state, director.winner_slot_id])
@@ -1572,6 +1649,12 @@ func _test_results_freeze_and_dwell() -> void:
 
 func _test_rematch_reset() -> void:
 	print("\n--- Test 17: rematch reset (multi-round, no scene reload) ---")
+	# Like Test 16, this is about _full_reset() correctness across rounds,
+	# not the objective itself. Each round's winner still genuinely becomes
+	# the carrier via a real touch (so relic.gd's own carrier-drop-on-reset
+	# path, reset_to_pedestal()'s "a round can end with the carrier mid-carry"
+	# branch, is exercised for real) - director.collect() then simulates
+	# reaching extraction. See the file-header CHECKER-CONTRACT CHANGE note.
 	var rig := await _load_rig()
 	var arena: Node2D = rig.arena
 	var director: MatchDirector = arena.match_director
@@ -1600,6 +1683,12 @@ func _test_rematch_reset() -> void:
 			await physics_frame
 		director.debug_force_open()
 		for _i in range(15):
+			await physics_frame
+		if relic.carrier_slot_id != winner_slot:
+			_report("Rematch round %d setup (becomes carrier)" % (round_i + 1), "FAIL", "carrier_slot_id=%d expected=%d" % [relic.carrier_slot_id, winner_slot])
+			continue
+		director.collect(winner_slot)  # wins by reaching extraction while carrying
+		for _i in range(5):
 			await physics_frame
 		if director.state != MatchDirector.State.RESULTS or director.winner_slot_id != winner_slot:
 			_report("Rematch round %d setup" % (round_i + 1), "FAIL", "state='%s' winner=%d" % [director.state, director.winner_slot_id])
@@ -1647,10 +1736,11 @@ func _test_rematch_reset() -> void:
 		_report("Rematch round %d: fresh BotBrains (new instances, empty path/blacklist)" % (round_i + 1), "PASS" if brains_fresh else "FAIL", "")
 
 		# relic.monitoring is permanently true by design (see relic.gd) -
-		# non-collectible is proven by _collected instead, which SETUP
-		# resets and which nothing can bypass while state != OPEN.
-		var gate_ok: bool = director.state == MatchDirector.State.SETUP and director.clock == 0.0 and director.winner_slot_id == -1 and not relic._collected
-		_report("Rematch round %d: gate SETUP, clock 0, Relic non-collectible, result cleared" % (round_i + 1), "PASS" if gate_ok else "FAIL", "state='%s' clock=%.2f winner=%d _collected=%s" % [director.state, director.clock, director.winner_slot_id, relic._collected])
+		# non-collectible is proven by carrier_slot_id instead, which SETUP's
+		# reset_to_pedestal() clears (dropping a still-carrying round winner
+		# in the process) and which nothing can bypass while state != OPEN.
+		var gate_ok: bool = director.state == MatchDirector.State.SETUP and director.clock == 0.0 and director.winner_slot_id == -1 and relic.carrier_slot_id == -1
+		_report("Rematch round %d: gate SETUP, clock 0, Relic non-collectible, result cleared" % (round_i + 1), "PASS" if gate_ok else "FAIL", "state='%s' clock=%.2f winner=%d carrier_slot_id=%d" % [director.state, director.clock, director.winner_slot_id, relic.carrier_slot_id])
 
 		var seeds_ok := true
 		for i in range(arena.brains.size()):
@@ -1858,13 +1948,20 @@ func _test_pier_to_vaultfloor_speed_spread() -> void:
 	_report("Pier->VaultFloor speed spread summary", "PASS" if passed == speeds.size() else "FAIL", "%d/%d arrival speeds succeeded" % [passed, speeds.size()])
 	await _unload_rig(arena)
 
-# --- Test 20: 20+ headless bot-only rounds + M3-2 fairness report (Step 5) --
-# docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md S14/S19 Step 5: run the real timed
-# SETUP->UNLOCKING->OPEN->RESULTS loop (not debug_force_open - the scattered-
-# ROAM-then-converge experiment requires the real setup phase to actually
-# elapse) for N rounds with all four slots bot-controlled ("P1 may use a bot
-# controller for this headless fairness experiment only" - approved for this
-# test alone; the real game always gives P1 a HumanController). Runs at the
+# --- Test 20: 20+ headless bot-only rounds + fairness report -----------------
+# Originated at docs/plans/M03_2_CORE_MATCH_LOOP_PLAN.md S14/S19 Step 5, and
+# needed NO change for M4-3 (see the file-header CHECKER-CONTRACT CHANGE
+# note): it drives the real timed SETUP->UNLOCKING->OPEN->RESULTS loop (not
+# debug_force_open - the scattered-ROAM-then-converge experiment requires the
+# real setup phase to actually elapse) for N rounds with all four slots
+# bot-controlled ("P1 may use a bot controller for this headless fairness
+# experiment only" - approved for this test alone; the real game always gives
+# P1 a HumanController), and simply waits for whatever RESULTS the CURRENT
+# accepted objective produces - the full M4-3 grab->carry->extraction loop
+# since 2026-09-13. Its fairness numbers therefore now measure that loop, not
+# the M3-2 first-touch race the numbers recorded in docs/DECISIONS.md
+# (2026-09-09/12) were about - re-run this test for current figures rather
+# than comparing its output against that older record directly. Runs at the
 # normal time_scale 1.0 - see FAIRNESS_ROUND_TIMEOUT_S's comment for why a
 # speed-up multiplier is deliberately NOT used here. MatchTelemetry (already
 # wired into the live scene) does the actual per-round bookkeeping; this test

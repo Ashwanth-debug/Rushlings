@@ -39,6 +39,15 @@ var is_climbing: bool = false
 ## those two - PowerSystem only decides WHEN an activation happens.
 var carried_power: int = PowerTypeScript.Type.NONE
 
+## M4-3 - Relic carry identity (CLAUDE.md M4-3 S1/S5). Owned here exactly
+## like carried_power - scripts/relic.gd is the only caller of
+## receive_relic()/drop_relic(), so this can never go stale relative to the
+## one physical Relic node. A separate flag from carried_power/has_power():
+## "Relic and active power are separate objects/states... do not merge them"
+## (CLAUDE.md M4-3 S6) - a carrier keeps using Push/Rocket/Freeze/Mine
+## normally while also carrying the Relic.
+var is_carrying_relic: bool = false
+
 ## Updated whenever horizontal intent is nonzero (see _physics_process).
 ## Rocket fires in this direction - the only "aim" M4-1 has, per
 ## docs/plans/M04_0_MATCH_SHAPE_DESIGN.md S06 caveat 1.
@@ -176,6 +185,28 @@ func consume_power() -> void:
 	print("[Player] P%d power slot empty" % slot_id)
 	carried_power = PowerTypeScript.Type.NONE
 	_update_power_indicator()
+
+## M4-3 - the entire Relic carry contract, called only by scripts/relic.gd
+## (mirroring receive_power()/consume_power()'s "only the pickup/PowerSystem
+## touch this" ownership rule). No speed modification, no restriction on
+## movement or power use - CLAUDE.md M4-3 S1: "carrier keeps normal M1
+## movement... remains vulnerable to powers/hazards... no speed penalty."
+func receive_relic() -> void:
+	is_carrying_relic = true
+	print("[Player] P%d is now carrying the Relic" % slot_id)
+	_update_relic_indicator()
+
+func drop_relic() -> void:
+	if not is_carrying_relic:
+		return
+	is_carrying_relic = false
+	print("[Player] P%d is no longer carrying the Relic" % slot_id)
+	_update_relic_indicator()
+
+func _update_relic_indicator() -> void:
+	if not has_node("RelicIndicator"):
+		return
+	$RelicIndicator.visible = is_carrying_relic
 
 func _update_power_indicator() -> void:
 	if not has_node("PowerIndicator"):

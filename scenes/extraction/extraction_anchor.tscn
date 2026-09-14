@@ -1,0 +1,30 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/extraction_anchor.gd" id="1"]
+
+[sub_resource type="RectangleShape2D" id="ExtractionAnchorShape"]
+size = Vector2(150, 110)
+
+[node name="ExtractionAnchor" type="Area2D"]
+script = ExtResource("1")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("ExtractionAnchorShape")
+
+[node name="ColorRect" type="ColorRect" parent="."]
+offset_left = -75.0
+offset_top = -55.0
+offset_right = 75.0
+offset_bottom = 55.0
+color = Color(0.3, 0.3, 0.35, 0.35)
+
+[node name="Label" type="Label" parent="."]
+offset_left = -75.0
+offset_top = -14.0
+offset_right = 75.0
+offset_bottom = 14.0
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.1, 0.1, 0.1, 1)
+horizontal_alignment = 1
+vertical_alignment = 1
+text = "EXTRACTION"

@@ -6,14 +6,20 @@ extends RefCounted
 # damage - damage itself is out of scope until STOP 3's health lands), Freeze
 # (control/movement denial, 0 damage). A plain typed constant, not a class
 # hierarchy - three fixed powers, no tiers/inventory/upgrade levels yet.
+#
+# M4-3 (CLAUDE.md M4-3 S9) adds Mine - Denial/prediction, per
+# docs/plans/M04_0_MATCH_SHAPE_DESIGN.md S06's power taxonomy. Same
+# carry-one/one-use contract as the other three; see scripts/mine.gd and
+# power_system.gd's _try_mine().
 
-enum Type { NONE, PUSH, ROCKET, FREEZE }
+enum Type { NONE, PUSH, ROCKET, FREEZE, MINE }
 
 const LABELS := {
 	Type.NONE: "",
 	Type.PUSH: "PSH",
 	Type.ROCKET: "RKT",
 	Type.FREEZE: "FRZ",
+	Type.MINE: "MNE",
 }
 
 # Prototype greybox colours only - readability treatment, not production art.
@@ -24,6 +30,7 @@ const COLORS := {
 	Type.PUSH: Color(0.95, 0.85, 0.15, 1.0),
 	Type.ROCKET: Color(0.9, 0.25, 0.1, 1.0),
 	Type.FREEZE: Color(0.3, 0.8, 0.95, 1.0),
+	Type.MINE: Color(0.55, 0.3, 0.05, 1.0),
 }
 
 static func label(type: int) -> String:

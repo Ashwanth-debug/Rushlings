@@ -18,7 +18,20 @@ enum State { ROAM, RECOVER }
 # invents a third State; it reuses ROAM's entire executor/path/recovery
 # machinery unchanged, only _decide_next()'s target selection differs -
 # exactly the same shape as the NORMAL_ROAM/NAV_STRESS_TEST Mode split above.
-enum Goal { ROAM, SEEK_RELIC }
+#
+# M4-3 (CLAUDE.md M4-3 S10) adds SEEK_EXTRACTION: once the Relic has been
+# carried at least once this round, EVERY bot - whether or not it is the
+# current carrier - pursues the (now locked) extraction anchor rather than
+# the Relic. This is deliberately the SAME target for both cases ("Choose
+# the smallest implementation that produces visible pursuit"): if this bot
+# is the carrier, walking there fulfils the win condition; if not, arriving
+# near the locked extraction is the smallest useful interception behaviour
+# CLAUDE.md asks for ("extraction approach"), and the existing USE_POWER
+# range check (unchanged below) naturally fires on whoever else shows up
+# there - no separate combat planner. SEEK_RELIC itself is generalised (not
+# replaced) to chase the Relic's LIVE position, whether that's still the
+# pedestal or a drop point after a carrier was defeated - see relic_ref.
+enum Goal { ROAM, SEEK_RELIC, SEEK_EXTRACTION }
 
 # Nav stress-test mode (Director feedback, iteration 4): "can a bot reliably
 # reach an explicit destination anywhere in the arena" replaces "does bots
@@ -123,12 +136,32 @@ var relic_x: float = 1000.0
 ## which is exactly what gates every pickup-seeking branch below off for them.
 var pickup_field = null
 
+## M4-3 - set via set_relic_ref() (a setter, not a constructor param, same
+## reasoning as pickup_field above - see set_pickup_field()'s own header).
+## The live scripts/relic.gd node, so SEEK_RELIC can chase its CURRENT
+## world position (pedestal or drop point) instead of a fixed x captured at
+## construction. Stays null for every pre-M4-3 test rig that never calls
+## the setter (tools/m3_check.gd, tools/nav_soak_test.gd,
+## tools/door_arrival_check.gd), which is exactly what falls back to the
+## old fixed relic_x/"VaultFloor" behaviour for them.
+var relic_ref = null
+## M4-3 - the locked extraction anchor's nav-graph node and real world x,
+## set via set_extraction_target() once scripts/extraction_system.gd
+## selects one. "" until then, matching every other "not yet known" target
+## sentinel in this file (target_node, wander_target_x).
+var extraction_target_node: String = ""
+var extraction_target_x: float = NAN
+
 var rng := RandomNumberGenerator.new()
 var pickup_rng := RandomNumberGenerator.new()
 var state: State = State.ROAM
 var mode: Mode = Mode.NORMAL_ROAM
 var goal: Goal = Goal.ROAM
 var goal_dirty: bool = false
+## M4-3 - which Goal a pending _request_goal() call will switch to once
+## _check_goal_switch() actually applies it. Meaningless while goal_dirty is
+## false.
+var _pending_goal: int = Goal.ROAM
 var _goal_dirty_since: float = 0.0
 ## Dev/telemetry only (S14): when this bot first arrived at VaultFloor while
 ## pursuing SEEK_RELIC, in brain-clock seconds; -1 until then. Reset by
@@ -293,29 +326,82 @@ func current_stress_destination() -> String:
 	var dest: String = stress_sequence[stress_index % stress_sequence.size()]
 	return STRESS_DEST_LABELS.get(dest, dest)
 
-## The OPEN-triggered goal switch (S08). Does NOT cancel anything itself -
-## it only records that a switch is wanted and when it was requested.
-## _check_goal_switch(), run every ROAM tick, performs the actual
-## cancellation once this bot's own reaction delay has elapsed AND it is
-## grounded on a valid node (capped at GOAL_SWITCH_GROUND_CAP). Idempotent:
-## a second call while already SEEK_RELIC (e.g. a stray extra signal) is a
-## no-op, never re-arming goal_dirty or resetting the staggered timer.
+## M4-1 STOP 1 - the only way anything outside this file learns about the
+## pickup field. Deliberately a setter, not a constructor param - see
+## pickup_field's own declaration above.
+func set_pickup_field(field) -> void:
+	pickup_field = field
+
+## M4-3 - see relic_ref's own header above.
+func set_relic_ref(p_relic) -> void:
+	relic_ref = p_relic
+
+## M4-3 - called by arena_01.gd once scripts/extraction_system.gd locks an
+## anchor for the round. `node`/`x` are "" / NAN until then.
+func set_extraction_target(node: String, x: float) -> void:
+	extraction_target_node = node
+	extraction_target_x = x
+
+## The current live target node for SEEK_RELIC's pursuit - the Relic's own
+## nav_node while it's sitting in the world (pedestal OR a drop point),
+## falling back to the pre-M4-3 fixed "VaultFloor" for any rig that never
+## calls set_relic_ref(). Never returns a stale answer while the Relic is
+## actually CARRIED (not world-active) - callers only consult this under
+## Goal.SEEK_RELIC, which itself only exists before the first pickup or
+## after a drop (see notify_relic_dropped()), so the Relic is world-active
+## in every case this is actually read.
+func _relic_target_node() -> String:
+	if relic_ref != null and relic_ref.nav_node != "":
+		return relic_ref.nav_node
+	return "VaultFloor"
+
+## The OPEN-triggered goal switch (S08), generalised at M4-3 to cover every
+## later match-objective transition through the SAME staggered mechanism:
+## none of notify_open()/notify_relic_carried()/notify_relic_dropped()
+## cancel anything themselves - they only record which goal is wanted and
+## when it was requested. _check_goal_switch(), run every ROAM tick,
+## performs the actual cancellation once this bot's own reaction delay has
+## elapsed AND it is grounded on a valid node (capped at
+## GOAL_SWITCH_GROUND_CAP). Idempotent: a second call requesting the goal
+## already active (and not mid-transition) is a no-op, never re-arming
+## goal_dirty or resetting the staggered timer.
 func notify_open() -> void:
-	if goal == Goal.SEEK_RELIC:
+	_request_goal(Goal.SEEK_RELIC)
+
+## M4-3 (CLAUDE.md M4-3 S10) - fired for EVERY bot the instant the Relic is
+## picked up by anyone (including this bot itself), via scripts/relic.gd's
+## `picked_up` signal (arena_01.gd relays it to every brain). "Choose the
+## smallest implementation that produces visible pursuit": carrier and
+## non-carrier bots alike now aim at the same locked extraction - see the
+## Goal.SEEK_EXTRACTION header above for why one target serves both roles.
+func notify_relic_carried() -> void:
+	_request_goal(Goal.SEEK_EXTRACTION)
+
+## M4-3 - fired when a carried Relic becomes world-active again (the
+## carrier was defeated), via scripts/relic.gd's `dropped` signal. Every bot
+## reverts to pursuing the Relic's new live position - see
+## _relic_target_node().
+func notify_relic_dropped() -> void:
+	_request_goal(Goal.SEEK_RELIC)
+
+func _request_goal(new_goal: int) -> void:
+	if goal == new_goal and not goal_dirty:
 		return
-	goal = Goal.SEEK_RELIC
+	_pending_goal = new_goal
 	goal_dirty = true
 	_goal_dirty_since = _clock
 
 ## Reverts to plain ROAM (arena_01.gd calls this on every transition back to
 ## SETUP - a real rematch already gets a brand-new BotBrain where this is a
 ## no-op, but the debug_setup_10/15/25 keys reset MatchDirector alone without
-## rebuilding brains, and a bot must not carry SEEK_RELIC into a freshly
-## re-sealed vault). Same cancellation shape as set_mode()/notify_open().
+## rebuilding brains, and a bot must not carry SEEK_RELIC/SEEK_EXTRACTION
+## into a freshly re-sealed vault). Same cancellation shape as
+## set_mode()/notify_open().
 func reset_goal() -> void:
 	if goal == Goal.ROAM and not goal_dirty:
 		return
 	goal = Goal.ROAM
+	_pending_goal = Goal.ROAM
 	goal_dirty = false
 	target_node = ""
 	path = []
@@ -323,6 +409,8 @@ func reset_goal() -> void:
 	executor = null
 	seek_relic_arrived_at = -1.0
 	last_relic_door = ""
+	extraction_target_node = ""
+	extraction_target_x = NAN
 	decision_clock = min(decision_clock, 0.1)
 
 ## Approved cancel-on-ground re-path (S08): fires on the first ROAM tick
@@ -344,23 +432,27 @@ func _check_goal_switch() -> void:
 	var grounded_valid: bool = body.is_on_floor() and _invalid_platform == "" and current_node != "" and graph.nodes.has(current_node)
 	if grounded_valid or elapsed >= GOAL_SWITCH_GROUND_CAP:
 		goal_dirty = false
+		goal = _pending_goal
 		executor = null
 		path = []
 		path_index = 0
 		target_node = ""
 		decision_clock = min(decision_clock, 0.1)
-		print("[BotBrain] slot %d: goal switch -> SEEK_RELIC (reacted at %.2fs, grounded=%s, node='%s')" % [slot_index, elapsed, grounded_valid, current_node])
+		print("[BotBrain] slot %d: goal switch -> %s (reacted at %.2fs, grounded=%s, node='%s')" % [slot_index, _goal_label(goal), elapsed, grounded_valid, current_node])
+
+func _goal_label(g: int) -> String:
+	match g:
+		Goal.SEEK_RELIC:
+			return "SEEK_RELIC"
+		Goal.SEEK_EXTRACTION:
+			return "SEEK_EXTRACTION"
+		_:
+			return "ROAM"
 
 func consume_jump_intent() -> bool:
 	var j := _pending_jump
 	_pending_jump = false
 	return j
-
-## M4-1 STOP 1 - the only way anything outside this file learns about the
-## pickup field. Deliberately a setter, not a constructor param - see
-## pickup_field's own declaration above.
-func set_pickup_field(field) -> void:
-	pickup_field = field
 
 ## M4-1 STOP 2 - USE_POWER (CLAUDE.md M4-1 S10): "if carrying a power and
 ## another player is within a simple valid range/forward condition, [it] may
@@ -485,14 +577,18 @@ func _tick_roam(delta: float) -> void:
 		_decide_next()
 		if not path.is_empty():
 			return
-	# S10 final approach: VaultFloor is too low a chamber to jump inside, and
+	# S10 final approach: the vault chamber (and any Relic drop point) is too
+	# tight/irregular for a jump to land precisely, and
 	# _intra_node_wander()'s random x would have the bot drift away from the
 	# Relic instead of collecting it - a pure walk toward the Relic's actual
 	# (wrap-aware) x, holding once close enough for the Relic's own Area2D
-	# overlap to do the rest.
+	# overlap to do the rest. M4-3 adds the same shape for SEEK_EXTRACTION,
+	# aimed at the locked extraction anchor instead.
 	var pickup_here := _pickup_x_here()
-	if goal == Goal.SEEK_RELIC and current_node == "VaultFloor":
+	if goal == Goal.SEEK_RELIC and current_node == _relic_target_node():
 		_final_approach_relic()
+	elif goal == Goal.SEEK_EXTRACTION and extraction_target_node != "" and current_node == extraction_target_node:
+		_final_approach_x(extraction_target_x)
 	elif not is_nan(pickup_here):
 		_final_approach_x(pickup_here)
 	else:
@@ -670,7 +766,8 @@ func _decide_next() -> void:
 			if goal == Goal.SEEK_RELIC and picked == "VaultFloor" and picked == current_node and seek_relic_arrived_at < 0.0:
 				seek_relic_arrived_at = _clock
 			target_node = current_node
-			if not (goal == Goal.SEEK_RELIC and current_node == "VaultFloor"):
+			var at_final_approach_target: bool = (goal == Goal.SEEK_RELIC and current_node == _relic_target_node()) or (goal == Goal.SEEK_EXTRACTION and extraction_target_node != "" and current_node == extraction_target_node)
+			if not at_final_approach_target:
 				wander_target_x = _random_wander_x(current_node)
 			return
 		target_node = picked
@@ -693,11 +790,13 @@ func _decide_next() -> void:
 
 ## Which target-selection policy is active - goal (the real match objective)
 ## always wins over mode (a dev-only ROAM/NAV_STRESS_TEST toggle): SEEK_RELIC
-## means the match is racing to the Relic regardless of what debug mode
-## happens to be set.
+## and SEEK_EXTRACTION mean the match is racing toward the Relic/extraction
+## regardless of what debug mode happens to be set.
 func _pick_target_for_mode() -> String:
+	if goal == Goal.SEEK_EXTRACTION:
+		return extraction_target_node if extraction_target_node != "" else current_node
 	if goal == Goal.SEEK_RELIC:
-		return "VaultFloor"
+		return _relic_target_node()
 	return _pick_stress_target() if mode == Mode.NAV_STRESS_TEST else _pick_interest_target()
 
 ## Approved S08 fallback: "if [Dijkstra] returns empty - which should be
@@ -726,9 +825,13 @@ const RELIC_ARRIVAL_TOL := 8.0
 ## S10 final approach, the one new behaviour SEEK_RELIC adds beyond reusing
 ## ROAM's machinery: a pure wrap-aware walk toward the Relic's real x, no
 ## jump (the 84px alcove is too low), holding once close enough that the
-## Relic's own Area2D overlap resolves the actual collection.
+## Relic's own Area2D overlap resolves the actual collection. M4-3: reads
+## the LIVE Relic position via relic_ref when available (pedestal or a
+## drop point), falling back to the fixed relic_x every pre-M4-3 test rig
+## that never calls set_relic_ref() already relied on.
 func _final_approach_relic() -> void:
-	_final_approach_x(relic_x)
+	var x: float = relic_ref.global_position.x if relic_ref != null else relic_x
+	_final_approach_x(x)
 
 ## M4-1 STOP 1 - generalised for pickups: the exact same "walk to this real
 ## x and hold, let the target's own Area2D resolve collection" shape

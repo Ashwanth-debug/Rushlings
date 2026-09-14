@@ -68,6 +68,13 @@ var spawn_anchors: Array = []  # Array[Vector2] - the four authored Spawn marker
 var power_system: PowerSystem = null
 var pickups_parent: Node = null
 var pickup_field = null
+## M4-3 - the single physical Relic node (scripts/relic.gd), so a Defeated
+## carrier's Relic can drop through the same _finish_defeat() every other
+## defeat consequence (power spill, respawn) already goes through. null-safe
+## (optional 7th configure() param) so every pre-M4-3 test rig that never
+## passes one - none currently do, but this keeps the contract explicit - is
+## unaffected: a carrier simply cannot exist without a live Relic node.
+var relic = null
 
 # CharacterBody2D -> seconds remaining. Not per-slot-id, so a body that has
 # since been fully replaced can never be operated on by a stale reference -
@@ -82,13 +89,14 @@ var _protection_timers: Dictionary = {}
 var _reaction_timers: Dictionary = {}
 var _reaction_sources: Dictionary = {}
 
-func configure(p_players: Array, p_geometry, p_spawn_anchors: Array, p_power_system: PowerSystem, p_pickups_parent: Node, p_pickup_field) -> void:
+func configure(p_players: Array, p_geometry, p_spawn_anchors: Array, p_power_system: PowerSystem, p_pickups_parent: Node, p_pickup_field, p_relic = null) -> void:
 	players = p_players
 	geometry = p_geometry
 	spawn_anchors = p_spawn_anchors
 	power_system = p_power_system
 	pickups_parent = p_pickups_parent
 	pickup_field = p_pickup_field
+	relic = p_relic
 	if not power_system.power_hit.is_connected(_on_power_hit):
 		power_system.power_hit.connect(_on_power_hit)
 
@@ -174,6 +182,14 @@ func _update_reaction_timers(delta: float) -> void:
 func _finish_defeat(target: CharacterBody2D, source_power_type: int = PowerTypeScript.Type.NONE) -> void:
 	if target.has_power():
 		_spill_power(target)
+	# M4-3 (CLAUDE.md M4-3 S6): "Relic and active power are separate
+	# objects/states. Both may be dropped from the same defeat. Do not
+	# merge them." - a deliberately separate branch from _spill_power()
+	# above, at the target's CURRENT position (wherever the reaction
+	# window carried them), same reasoning as the spill's own position.
+	if "is_carrying_relic" in target and target.is_carrying_relic and relic != null:
+		var drop_node: String = geometry.canonical_platform(target) if target.is_on_floor() else ""
+		relic.drop_at(target, target.global_position, drop_node)
 	power_system.clear_freeze(target)
 	target.end_dying()
 	target.set_defeated(true)

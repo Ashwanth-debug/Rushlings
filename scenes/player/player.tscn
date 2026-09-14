@@ -47,6 +47,14 @@ offset_right = 8.0
 offset_bottom = -72.0
 color = Color(0.95, 0.85, 0.15, 1)
 
+[node name="RelicIndicator" type="ColorRect" parent="."]
+visible = false
+offset_left = -26.0
+offset_top = -124.0
+offset_right = 26.0
+offset_bottom = -106.0
+color = Color(0.85, 0.75, 0.25, 1)
+
 [node name="Label" type="Label" parent="."]
 visible = false
 offset_left = -70.0

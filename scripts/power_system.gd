@@ -46,6 +46,7 @@ signal power_hit(shooter_slot_id: int, target_slot_id: int, power_type: int)
 
 const PowerTypeScript := preload("res://scripts/power_type.gd")
 const RocketScene := preload("res://scenes/power/rocket_projectile.tscn")
+const MineScene := preload("res://scenes/power/mine.tscn")
 
 ## Prototype tuning values, reported at STOP 1/2 handoff - not production
 ## constants. Push reuses player.gd's own launch_strength (see _try_push),
@@ -105,6 +106,8 @@ func try_activate(user: CharacterBody2D) -> bool:
 			return _fire_rocket(user)
 		PowerTypeScript.Type.FREEZE:
 			return _try_freeze(user)
+		PowerTypeScript.Type.MINE:
+			return _try_mine(user)
 		_:
 			return false
 
@@ -166,6 +169,42 @@ func _fire_rocket(user: CharacterBody2D) -> bool:
 	print("[PowerSystem] P%d fired ROCKET (dir=%.0f)" % [user.slot_id, dir])
 	power_used.emit(user.slot_id, PowerTypeScript.Type.ROCKET)
 	return true
+
+## M4-3 - Mine (CLAUDE.md M4-3 S9). Always valid to place, exactly like
+## Rocket is always valid to fire - placing IS the tested behaviour, not a
+## targeted lock. Reuses `projectile_parent` (the existing $Projectiles
+## container) rather than a new scene node - mines are transient world
+## objects with the same "arena_01.gd owns the container, PowerSystem owns
+## what lives in it" lifetime as rockets, and PowerSystem.reset()'s existing
+## "clear every child of projectile_parent" loop therefore already clears
+## any live mine on a rematch/lab toggle with zero extra code.
+func _try_mine(user: CharacterBody2D) -> bool:
+	var mine := MineScene.instantiate()
+	projectile_parent.add_child(mine)
+	mine.global_position = user.global_position
+	mine.setup(user.slot_id)
+	mine.mine_triggered.connect(_on_mine_triggered)
+	user.consume_power()
+	print("[PowerSystem] P%d placed MINE at %s" % [user.slot_id, user.global_position])
+	power_used.emit(user.slot_id, PowerTypeScript.Type.MINE)
+	return true
+
+## Mirrors report_rocket_hit(): the hit event (print, signal, target flash)
+## lives in exactly one place regardless of which of potentially several
+## live mines caused it, and re-emits the SAME power_hit signal HealthSystem
+## already listens to - Mine's damage never gets a second implementation.
+func _on_mine_triggered(target_slot_id: int, owner_slot_id: int) -> void:
+	var target := _find_player(target_slot_id)
+	if target != null:
+		target.flash_hit()
+	print("[PowerSystem] MINE HIT: P%d triggered P%d's mine" % [target_slot_id, owner_slot_id])
+	power_hit.emit(owner_slot_id, target_slot_id, PowerTypeScript.Type.MINE)
+
+func _find_player(slot_id: int) -> CharacterBody2D:
+	for p in players:
+		if is_instance_valid(p) and p.slot_id == slot_id:
+			return p
+	return null
 
 ## Called by rocket_projectile.gd on a confirmed player hit. Kept here so the
 ## hit event (print, signal, visual) exists in exactly one place regardless

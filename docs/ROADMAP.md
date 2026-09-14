@@ -431,6 +431,13 @@ produce schedule surprise.
 **M4-0 — Match Shape Design: [x] COMPLETE / APPROVED (2026-09-12).**
 **M4-1 — Contact: [x] COMPLETE / ACCEPTED (2026-09-12).** Full record: `docs/DECISIONS.md`.
 **M4-2 — The Arena Bites: [x] COMPLETE / ACCEPTED (2026-09-13).** Full record: `docs/DECISIONS.md`.
+**M4-3 — The Climax: [x] COMPLETE / ACCEPTED (2026-09-14).** Mechanics built and automated-tested
+autonomously (2026-09-13); confirmed by Game Director human playtest and closed out 2026-09-14.
+Full record: `docs/DECISIONS.md`.
+**M4-4 — The Long Match: [~] IMPLEMENTED / NOT ACCEPTED (2026-09-14).** BUILD → ESCALATE → CLIMAX
+phase clock, tier-gated pickup access, hazard escalation and a 20-match soak are built and
+automated-tested; requires Game Director human playtest before acceptance. Full record:
+`docs/DECISIONS.md`.
 
 ## Authority
 **`docs/plans/M04_0_MATCH_SHAPE_DESIGN.md` is the authority for this phase** and supersedes any
@@ -474,8 +481,8 @@ Full detail in `docs/GAME_DESIGN.md` §7A, §8A, §10, §11.
 | **M4-0** Match Shape Design | **[x] COMPLETE / APPROVED** | *What is a Rushlings match?* | The design document. No code. |
 | **M4-1** Contact | **[x] COMPLETE / ACCEPTED (2026-09-12)** | **Does hurting each other feel good?** | Push + Rocket + Freeze · one-use, carry-one, pickup · 3-pip health · defeat → spill → respawn · minimal safe-respawn · protection-window prototype. **Damage-model amendment: all three powers now deal 1 pip on hit, not just Rocket** — see `docs/DECISIONS.md`. No Relic change, no hazards, no long match. |
 | **M4-2** The Arena Bites | **[x] COMPLETE / ACCEPTED (2026-09-13)** | **Does arena-as-opponent improve the game?** | Escalating danger zones with a mandatory warning → active → safe cycle. First real test of Push-is-displacement-only (now also Push-deals-1-pip, per the M4-1 amendment). |
-| **M4-3** The Climax | [ ] Not started | **Does carry-to-locked-extraction produce a great ending?** | Relic carry · five authored region anchors · selected once and locked for the round · drop-on-defeat · **Mine**. |
-| **M4-4** The Long Match | [ ] Not started | **Does ~2 minutes hold attention?** | BUILD → ESCALATE → CLIMAX phase clock · Tier 1/2/3 access schedule · hazard escalation schedule · real timing measurement · **resolves the open timeout question**. |
+| **M4-3** The Climax | **[x] COMPLETE / ACCEPTED (2026-09-14)** | **Does carry-to-locked-extraction produce a great ending?** | Relic carry · five authored region anchors · selected once and locked for the round · drop-on-defeat · **Mine**. Built, automated-tested, and confirmed by Game Director human playtest. |
+| **M4-4** The Long Match | **[~] IMPLEMENTED / NOT ACCEPTED (2026-09-14)** | **Does ~2 minutes hold attention?** | BUILD → ESCALATE → CLIMAX phase clock · Tier 1/2/3 access schedule · hazard escalation schedule · real timing measurement. Built and automated-tested; awaiting Game Director playtest. **Timeout resolution remains OPEN** - not resolved by this stage, see below. |
 | **GATE** Progression judgment | [ ] Not started | *Is access escalation enough?* | Decide from human evidence whether stat progression is needed at all. |
 | **M4-5** Broader Power Set | [ ] Not started | *Do the categories stay distinct at scale?* | Shield, Teleport, Mobility. Conditional on M4-1 succeeding. |
 | **M4-6** Economy | [ ] Not started | *Only if the GATE says yes* | Resources, levels, charges. Designed against evidence, never imagination. |
@@ -600,6 +607,47 @@ playing for `reaction_duration` ≈0.4s before the target disappears) are all ac
 including two rounds of Game Director playtest revision and the exact accepted tuning values:
 `docs/DECISIONS.md` (2026-09-12/13 entries). Permanent regression tool: `tools/m4_2_check.gd`.
 
+## M4-3 — COMPLETE / ACCEPTED (2026-09-14)
+
+**Status: ACCEPTED** by the Game Director. Relic carry (`scripts/relic.gd`), five authored
+extraction anchors with once-per-round locked selection (`scripts/extraction_system.gd`,
+`scripts/extraction_anchor.gd`), drop-on-defeat independent of power spill, bot pursuit/interception
+(`BotBrain.Goal.SEEK_EXTRACTION`), Mine (`scripts/mine.gd`), the Relic-opening salience treatment
+(camera shake + flash pulse), and a Climax Lab dev mode were implemented and automated-tested
+2026-09-13, then confirmed by Game Director human playtest 2026-09-14: carry-not-instant-win reads
+clearly, the activated extraction is understandable and stays locked through ownership churn, a
+carrier can reach it and win, a defeated carrier's dropped Relic can be continued toward the SAME
+extraction by another player, health/powers/hazards keep working during the climax, the OPEN
+salience treatment is noticeable, and Mine mechanically works. Full implementation record, including
+a genuine production bug found and fixed during automated testing (an `Area2D.monitoring` toggle
+staleness issue, the same class the original M3-2 `relic.gd` already avoided): `docs/DECISIONS.md`
+(2026-09-13, implementation; 2026-09-14, acceptance close-out).
+
+**`tools/m3_check.gd`'s checker-contract updated at close-out (2026-09-14).** Tests 14–17
+(`_test_relic_collection_and_winner`, `_test_winner_resolution`, `_test_results_freeze_and_dwell`,
+`_test_rematch_reset`) were written against the M3-era first-touch-instant-win contract, which M4-3
+deliberately replaces — left unmodified they produced ~43 non-regression failures, confirmed at
+M4-3's own implementation record to be exactly this single root cause. Rather than delete or weaken
+them, each was pointed at the contract it actually protects: Tests 14/15 still exercise
+`relic.gd`'s real collection guard and closest/lowest-slot_id tie-break math directly, now asserting
+on `relic.carrier_slot_id` (who becomes carrier) instead of `director.winner_slot_id`/RESULTS (who
+wins); Tests 16/17 are genuinely about post-RESULTS behaviour (controller freeze, HUD text, rematch
+dwell gate, multi-round reset), so they now call `director.collect(slot_id)` — the same entry point
+`extraction_anchor.gd` calls in production — to reach RESULTS once the intended winner has (for
+real, via an actual touch) already become the carrier. Test 20's real bot-only fairness soak needed
+no change; it already drives the real timed loop and now measures the current (M4-3) objective
+end-to-end. `tools/m3_check.gd`'s own header comment carries the full before/after for a future
+reader. All M1/M2/M3 movement/traversal/navigation invariant coverage in that file is unchanged.
+`tools/arena_check.gd`, `tools/m4_1_check.gd`, `tools/m4_2_check.gd` and `tools/m4_3_check.gd` all
+still pass on the exact committed tree.
+
+**Diagnostic findings, preserved but explicitly not acted on:** the 20-round soak found a strong
+winner-distribution skew (P2 17/20, P3 2/20, P4 1/20) and zero organic Mine placements — both
+recorded as evidence, not instructions to rebalance. M4-4's longer match may materially change
+either number; see `docs/DECISIONS.md` (2026-09-14).
+
+**M4-4 — The Long Match is next.**
+
 ## Open questions this phase must answer with evidence, not argument
 - All phase timings and total match duration.
 - **Timeout resolution** — what happens at the time limit. A hard-cap/sudden-death rule was
@@ -610,15 +658,9 @@ including two rounds of Game Director playtest revision and the exact accepted t
 - Whether stat progression is needed at all (the GATE, after M4-4).
 - Pickup density and respawn interval.
 - Whether the post-respawn protection window becomes permanent.
-- **Relic-opening salience (new requirement, recorded 2026-09-12 from cross-milestone human
-  playtesting during the M4-2 Arena Bites Lab session — see `docs/DECISIONS.md`).** At longer setup
-  durations, once M4-1's Contact systems make the arena engaging on their own, a player can
-  completely miss the Relic opening and only learn a round ended when someone wins. **When CLIMAX
-  begins, every player must immediately perceive that the match state has changed, even if they are
-  currently fighting or collecting elsewhere.** The current quiet gate animation is not sufficient
-  once the arena holds attention independently of the Relic. Candidate treatments (hypotheses only,
-  none approved): brief camera shake, stronger gate motion, an arena-wide visual pulse, a short
-  global flash, a strong audio cue. Resolved at M4-3/M4-4, not before.
+- **Relic-opening salience** — accepted at M4-3 as a working treatment (camera shake + flash pulse);
+  a stronger gate motion or an audio cue remain recorded alternatives if a longer M4-4 match reveals
+  it isn't salient enough once BUILD/ESCALATE give players far more time to disengage from the Relic.
 
 ## Known risks
 1. **Readability is the binding constraint, not code** — four tiny characters, health states,

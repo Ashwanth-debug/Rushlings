@@ -1,10 +1,13 @@
 # M4-0 — Match Shape Design
 
 **Status: M4-0 COMPLETE / APPROVED (2026-09-12), with Game Director amendments applied.**
-**M4-1: COMPLETE / ACCEPTED (2026-09-12).** Full close-out record: `docs/DECISIONS.md`. M4-2 is
-next. This document's text below is preserved as written at M4-0 approval, per this project's
+**M4-1: COMPLETE / ACCEPTED (2026-09-12).** **M4-2: COMPLETE / ACCEPTED (2026-09-13).**
+**M4-3: COMPLETE / ACCEPTED (2026-09-14)** — Relic carry, five locked extraction anchors,
+drop-on-defeat, Mine and bot pursuit were built and automated-tested 2026-09-13, then confirmed by
+Game Director human playtest 2026-09-14. Full close-out records: `docs/DECISIONS.md`. M4-4 — The
+Long Match is next. This document's text below is preserved as written at M4-0 approval, per this project's
 standing rule against deleting superseded text — it is the historical record of what was approved
-*before* M4-1 was built and played.
+*before* M4-1/M4-2/M4-3 were built and played.
 **Post-M4-1 amendment (2026-09-12), read this before trusting §04.2/§05.6 below at face value:**
 M4-1 human playtesting found that Rocket as the *only* damage source among three equally scarce
 powers made reducing health too slow. **Push and Freeze now also deal 1 pip of damage on a
@@ -803,4 +806,5 @@ are marked as superseded rather than deleted.
 ---
 
 **END — M4-0 MATCH SHAPE DESIGN. COMPLETE / APPROVED 2026-09-12.**
-**M4-1 is PLANNED / NOT STARTED. No implementation authorised by this document.**
+**M4-1: COMPLETE / ACCEPTED. M4-2: COMPLETE / ACCEPTED. M4-3: COMPLETE / ACCEPTED (2026-09-14) — see
+`docs/DECISIONS.md` (2026-09-13/14) for the full record. M4-4 — The Long Match is next.**
